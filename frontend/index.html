@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turbofan RUL Predictor</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="container">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-icon">⚙</div>
+          <div>
+            <div class="brand-title">Turbofan RUL Predictor</div>
+            <div class="brand-subtitle">NASA CMAPSS · Predictive Maintenance</div>
+          </div>
+        </div>
+        <nav class="nav">
+          <a href="https://github.com/alvin-alias/cmapss-rul-prediction" target="_blank" class="nav-link">GitHub</a>
+          <a href="#methodology" class="nav-link">Methodology</a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <h1 class="hero-title">Predict Engine Life Before Failure</h1>
+      <p class="hero-desc">
+        Upload a turbofan engine's sensor history and get a data-driven estimate of how many
+        operating cycles remain before failure — with an AI explanation of what's driving the prediction.
+      </p>
+      <div class="hero-badges">
+        <span class="badge">XGBoost</span>
+        <span class="badge">SHAP Interpretability</span>
+        <span class="badge">NASA CMAPSS FD001</span>
+        <span class="badge">21 Sensors</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main content -->
+  <main class="main">
+    <div class="container">
+      <div class="grid">
+
+        <!-- Left: Upload panel -->
+        <div class="card upload-card">
+          <div class="card-header">
+            <h2 class="card-title">Upload Sensor Data</h2>
+            <p class="card-desc">CSV with columns: cycle, sensor_2, sensor_3, sensor_4, sensor_7, sensor_8, sensor_9, sensor_11 … sensor_21</p>
+          </div>
+
+          <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">📂</div>
+            <div class="upload-text">Drop CSV file here</div>
+            <div class="upload-hint">or click to browse</div>
+            <input type="file" id="fileInput" accept=".csv" hidden />
+          </div>
+
+          <div class="file-info hidden" id="fileInfo">
+            <span class="file-name" id="fileName"></span>
+            <span class="file-rows" id="fileRows"></span>
+          </div>
+
+          <button class="btn btn-primary" id="predictBtn" disabled>
+            Run Prediction
+          </button>
+
+          <div class="sample-link">
+            <a href="#" id="loadSample">Load sample engine data</a> to try without uploading
+          </div>
+        </div>
+
+        <!-- Right: Results panel -->
+        <div class="card results-card" id="resultsCard">
+
+          <!-- Empty state -->
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">📡</div>
+            <div class="empty-text">Results will appear here</div>
+            <div class="empty-hint">Upload sensor data and run prediction</div>
+          </div>
+
+          <!-- Loading state -->
+          <div class="loading-state hidden" id="loadingState">
+            <div class="spinner"></div>
+            <div class="loading-text">Running prediction…</div>
+          </div>
+
+          <!-- Result -->
+          <div class="result-state hidden" id="resultState">
+
+            <div class="rul-display">
+              <div class="rul-label">Remaining Useful Life</div>
+              <div class="rul-value" id="rulValue">—</div>
+              <div class="rul-unit">cycles</div>
+              <div class="rul-band" id="rulBand"></div>
+            </div>
+
+            <div class="rul-gauge-wrap">
+              <div class="rul-gauge" id="rulGauge">
+                <div class="gauge-fill" id="gaugeFill"></div>
+                <div class="gauge-labels">
+                  <span>0</span><span>Critical</span><span>125</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="shap-section">
+              <div class="shap-title">What's Driving This Prediction</div>
+              <div class="shap-subtitle">SHAP values — contribution of each sensor feature</div>
+              <div class="shap-bars" id="shapBars"></div>
+            </div>
+
+            <div class="warning-box hidden" id="warningBox">
+              <span class="warning-icon">⚠</span>
+              <span id="warningText"></span>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Methodology -->
+  <section class="methodology" id="methodology">
+    <div class="container">
+      <h2 class="section-title">How It Works</h2>
+      <div class="method-grid">
+        <div class="method-step">
+          <div class="step-num">01</div>
+          <div class="step-title">Sensor Ingestion</div>
+          <div class="step-desc">21 sensors per cycle — temperatures, pressures, fan/core speeds, fuel flow — from the NASA CMAPSS FD001 dataset.</div>
+        </div>
+        <div class="method-step">
+          <div class="step-num">02</div>
+          <div class="step-title">Feature Engineering</div>
+          <div class="step-desc">Rolling mean and standard deviation over 30-cycle windows. Constant-variance sensors dropped. Degradation indicators derived from domain knowledge.</div>
+        </div>
+        <div class="method-step">
+          <div class="step-num">03</div>
+          <div class="step-title">XGBoost Model</div>
+          <div class="step-desc">Gradient boosted regression trained on 100 run-to-failure engine trajectories. Engine-grouped cross-validation prevents data leakage.</div>
+        </div>
+        <div class="method-step">
+          <div class="step-num">04</div>
+          <div class="step-title">SHAP Explanation</div>
+          <div class="step-desc">TreeSHAP explains each prediction — which sensors are most responsible and in which direction. Tied back to known turbofan degradation physics.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-left">
+          Built by <strong>Alvin Alias</strong> · MS Data Science, University of Washington · 2026
+        </div>
+        <div class="footer-right">
+          <a href="https://github.com/alvin-alias" target="_blank">GitHub</a>
+          <a href="https://linkedin.com/in/alvin-alias" target="_blank">LinkedIn</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+# Private local documentation — never pushed to GitHub
+local_docs/
+
+# Data files — download instructions in README
+data/raw/
+data/processed/
+*.csv
+*.txt
+*.h5
+
+# Jupyter artifacts
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model artifacts (large binary files — regenerate by running notebooks/03_modeling.ipynb)
+*.pkl
+*.joblib
+models/
+!models/.gitkeep
