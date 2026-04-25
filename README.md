@@ -177,4 +177,14 @@ Update `API_BASE` in `frontend/app.js` to `http://localhost:8000` for local test
 
 ---
 
+## Planned Enhancements
+
+Forward-looking work queued against this repo:
+
+- [ ] **MLflow experiment tracking retrofit** *(queued — April 2026 peer-benchmark pass)* — Log hyperparameter sweeps, feature-set variants, and final model artifacts to a local MLflow tracking store. Surface the MLflow UI comparison screenshot in this README so recruiters see explicit experiment-tracking hygiene, not just a single "best" number. ~2–3 hours of work; retrofit-friendly (no architectural changes). See `portfolio_pipeline.md` → *Peer-Benchmark Pass* for rationale.
+- [ ] Fill in the published RMSE numbers in the Results table once the final model is trained and evaluated
+- [ ] Replace `https://your-project.vercel.app` and `https://your-api.onrender.com` placeholders with the live URLs once deployed
+
+---
+
 *Built by Alvin Alias | MS Data Science, University of Washington | 2026*

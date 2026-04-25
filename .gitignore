@@ -1,5 +1,5 @@
 # Private local documentation — never pushed to GitHub
-local_docs/
+**/*_local/
 
 # Data files — download instructions in README
 data/raw/
