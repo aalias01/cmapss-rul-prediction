@@ -1,4 +1,6 @@
-# Private local documentation — never pushed to GitHub
+# Private local folders — never pushed to GitHub
+# Convention: any folder ending in _local/ is gitignored.
+# Today this covers docs_local/ (working notes) and research_local/ (papers, references).
 **/*_local/
 
 # Data files — download instructions in README
@@ -7,6 +9,12 @@ data/processed/
 *.csv
 *.txt
 *.h5
+
+# Exception: ship the demo CSV so the upload workflow is testable end-to-end
+!frontend/sample_engine.csv
+
+# Exception: runtime.txt pins the Python version for Render deployment
+!runtime.txt
 
 # Jupyter artifacts
 .ipynb_checkpoints/

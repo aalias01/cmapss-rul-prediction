@@ -1,0 +1,21 @@
+# Render deployment manifest — Turbofan RUL Predictor API
+# Docs: https://render.com/docs/blueprint-spec
+#
+# To deploy: push this repo to GitHub, then on Render dashboard:
+#   New + → Blueprint → connect this repo. Render reads this file and
+#   provisions the service automatically.
+
+services:
+  - type: web
+    name: cmapss-rul-api
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

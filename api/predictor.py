@@ -64,19 +64,18 @@ def predict(request: PredictRequest) -> PredictResponse:
     raw_pred = float(model.predict(X)[0])
     predicted_rul = int(np.clip(raw_pred, 0, 125))
 
-    # SHAP explanation for this single prediction
-    shap_values = explainer.shap_values(X)[0]
-    shap_series = pd.Series(shap_values, index=feature_cols).abs().sort_values(ascending=False)
-    top_5 = shap_series.head(5)
-
+    # SHAP explanation for this single prediction.
+    # Compute once, reuse for both ranking (by |value|) and signed direction.
     raw_shap = pd.Series(explainer.shap_values(X)[0], index=feature_cols)
+    top_5_features = raw_shap.abs().sort_values(ascending=False).head(5).index
+
     top_factors = [
         ShapEntry(
             feature=feat,
             value=round(float(raw_shap[feat]), 3),
             direction="increases_rul" if raw_shap[feat] > 0 else "decreases_rul",
         )
-        for feat in top_5.index
+        for feat in top_5_features
     ]
 
     warning = None

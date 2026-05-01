@@ -117,10 +117,15 @@ Update `API_BASE` in `frontend/app.js` to `http://localhost:8000` for local test
 ## Deployment
 
 **Backend (Render):**
+
+The repo ships with a `render.yaml` Blueprint and a `runtime.txt` pinning Python 3.11.9.
+
 1. Push repo to GitHub
-2. New Web Service on Render → connect repo
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
+2. On Render: **New + → Blueprint** → connect this repo. Render reads `render.yaml` and provisions the web service automatically (build, start command, health check, Python version).
+3. Manual fallback if you prefer the dashboard:
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
+   - Health check path: `/health`
 
 **Frontend (Vercel):**
 1. Import GitHub repo on Vercel
@@ -136,6 +141,8 @@ Update `API_BASE` in `frontend/app.js` to `http://localhost:8000` for local test
 .
 ├── environment.yml          ← Local dev (conda)
 ├── requirements.txt         ← Deployment (Render/pip)
+├── runtime.txt              ← Python version pin (Render)
+├── render.yaml              ← Render Blueprint manifest
 ├── .gitignore
 │
 ├── data/raw/                ← gitignored — download separately
@@ -157,7 +164,8 @@ Update `API_BASE` in `frontend/app.js` to `http://localhost:8000` for local test
 ├── frontend/                ← Static site → Vercel
 │   ├── index.html
 │   ├── style.css
-│   └── app.js
+│   ├── app.js
+│   └── sample_engine.csv    ← Demo CSV — try the upload flow without your own data
 │
 └── models/                  ← gitignored — trained model artifacts
 ```
@@ -174,16 +182,6 @@ Update `API_BASE` in `frontend/app.js` to `http://localhost:8000` for local test
 - Professional frontend deployment on Vercel (no framework)
 - Python backend deployment on Render with CORS configuration
 - Clean reproducible environment with conda + `environment.yml`
-
----
-
-## Planned Enhancements
-
-Forward-looking work queued against this repo:
-
-- [ ] **MLflow experiment tracking retrofit** *(queued — April 2026 peer-benchmark pass)* — Log hyperparameter sweeps, feature-set variants, and final model artifacts to a local MLflow tracking store. Surface the MLflow UI comparison screenshot in this README so recruiters see explicit experiment-tracking hygiene, not just a single "best" number. ~2–3 hours of work; retrofit-friendly (no architectural changes). See `portfolio_pipeline.md` → *Peer-Benchmark Pass* for rationale.
-- [ ] Fill in the published RMSE numbers in the Results table once the final model is trained and evaluated
-- [ ] Replace `https://your-project.vercel.app` and `https://your-api.onrender.com` placeholders with the live URLs once deployed
 
 ---
 
