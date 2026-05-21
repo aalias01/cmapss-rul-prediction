@@ -1,8 +1,26 @@
 """
-Model loading and inference logic.
+Model loading and inference for the turbofan RUL prediction API.
 
-Separated from main.py so the FastAPI routes stay thin and readable.
-This is the bridge between the trained model (from notebooks/src/) and the API.
+This module is the bridge between the trained XGBoost artifact (produced by
+03_modeling.ipynb and saved to models/xgb_rul.joblib) and the FastAPI routes
+in api/main.py. Keeping inference logic here — separate from the route
+definitions — keeps the routes thin and makes the prediction pipeline
+independently testable.
+
+Inference pipeline (per request)
+---------------------------------
+1. readings_to_dataframe()  — convert the JSON payload to a DataFrame and
+                              apply the same rolling-feature transform used
+                              at training time (src/features.add_rolling_features)
+2. predict()                — select the most recent cycle, run XGBoost,
+                              clip the output, compute SHAP values, and
+                              return a structured PredictResponse
+
+Module-level caching
+--------------------
+_model and _explainer are loaded once at server startup (via main.py's
+lifespan handler) and reused for every subsequent request. This avoids the
+~200 ms joblib + SHAP initialisation cost on every call.
 """
 
 import joblib
@@ -15,12 +33,30 @@ from api.schemas import PredictRequest, PredictResponse, ShapEntry
 
 MODEL_PATH = Path(__file__).parent.parent / "models" / "xgb_rul.joblib"
 
-# Module-level cache — model loads once when the server starts, not on every request
+# Module-level model cache — populated by load_model() at server startup.
 _model = None
 _explainer = None
 
 
-def load_model():
+def load_model() -> None:
+    """
+    Load the trained XGBoost model and initialise the SHAP TreeExplainer.
+
+    Called once during server startup via FastAPI's lifespan handler. Raises
+    FileNotFoundError if the model artifact does not exist — the caller
+    (main.py) catches this and logs a warning rather than crashing the server,
+    so the /health endpoint remains available even without a trained model.
+
+    Side effects
+    ------------
+    Sets the module-level _model and _explainer variables.
+
+    Raises
+    ------
+    FileNotFoundError
+        If models/xgb_rul.joblib is not present. Train the model by running
+        notebooks/03_modeling.ipynb first.
+    """
     global _model, _explainer
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
@@ -31,41 +67,112 @@ def load_model():
     _explainer = shap.TreeExplainer(_model)
 
 
-def get_model():
+def get_model() -> tuple:
+    """
+    Return the cached (model, explainer) pair, loading them if necessary.
+
+    Provides a lazy-load fallback for cases where load_model() was not called
+    at startup (e.g. during testing). In production, load_model() is always
+    called first via the lifespan handler, so this is effectively a no-op.
+
+    Returns
+    -------
+    tuple[XGBRegressor, shap.TreeExplainer]
+        The trained model and its associated SHAP explainer.
+    """
     if _model is None:
         load_model()
     return _model, _explainer
 
 
 def readings_to_dataframe(request: PredictRequest) -> pd.DataFrame:
-    """Convert API request payload into a feature-engineered DataFrame."""
+    """
+    Convert the API request payload into a feature-engineered DataFrame.
+
+    Applies the same rolling mean and standard deviation transform used during
+    training (src/features.add_rolling_features), computed over the full
+    sequence of cycles in the request. The window is capped at the number of
+    cycles provided so that short payloads still receive valid (if noisier)
+    feature values.
+
+    Parameters
+    ----------
+    request : PredictRequest
+        Validated request payload containing an ordered list of SensorReading objects.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with raw sensor columns plus _mean30 and _std30 variants,
+        ready for column selection and inference.
+    """
     rows = [r.model_dump() for r in request.readings]
     df = pd.DataFrame(rows)
 
     sensor_cols = [c for c in df.columns if c.startswith("sensor_")]
     window = min(30, len(df))
 
-    rolled_mean = df[sensor_cols].rolling(window, min_periods=1).mean().add_suffix("_mean30")
-    rolled_std = df[sensor_cols].rolling(window, min_periods=1).std().fillna(0).add_suffix("_std30")
-
-    df = pd.concat([df, rolled_mean, rolled_std], axis=1)
-    return df
+    rolled_mean = (
+        df[sensor_cols]
+        .rolling(window, min_periods=1)
+        .mean()
+        .add_suffix("_mean30")
+    )
+    rolled_std = (
+        df[sensor_cols]
+        .rolling(window, min_periods=1)
+        .std()
+        .fillna(0)
+        .add_suffix("_std30")
+    )
+    return pd.concat([df, rolled_mean, rolled_std], axis=1)
 
 
 def predict(request: PredictRequest) -> PredictResponse:
+    """
+    Run end-to-end inference for a single engine and return a structured response.
+
+    The prediction is made from the most recent cycle (last row after feature
+    engineering), because that row has the richest rolling-window context.
+    SHAP values are computed for that single row; the top 5 by absolute
+    magnitude are returned with their signed contributions in cycle units.
+
+    Parameters
+    ----------
+    request : PredictRequest
+        Validated request payload with at least one SensorReading.
+
+    Returns
+    -------
+    PredictResponse
+        Structured response including predicted RUL, a ±15-cycle confidence
+        band, the top 5 SHAP attributions, the number of cycles provided,
+        and an optional data-quality warning.
+
+    Raises
+    ------
+    FileNotFoundError
+        Propagated from load_model() if the model artifact is missing.
+    Exception
+        Any unexpected inference error is propagated to the caller (main.py),
+        which maps it to an HTTP 500 response.
+    """
     model, explainer = get_model()
 
     df = readings_to_dataframe(request)
 
-    # Use the last row — the most recent sensor reading is what we predict from
-    feature_cols = [c for c in df.columns if c not in {"cycle", "op_setting_1", "op_setting_2", "op_setting_3"}]
-    X = df[feature_cols].iloc[[-1]]
+    # Exclude metadata and operating settings — must match training feature set.
+    feature_cols = [
+        c for c in df.columns
+        if c not in {"cycle", "op_setting_1", "op_setting_2", "op_setting_3"}
+    ]
+    X = df[feature_cols].iloc[[-1]]  # Most recent cycle only
 
     raw_pred = float(model.predict(X)[0])
     predicted_rul = int(np.clip(raw_pred, 0, 125))
 
-    # SHAP explanation for this single prediction.
-    # Compute once, reuse for both ranking (by |value|) and signed direction.
+    # SHAP attribution for this single prediction.
+    # shap_values() returns an array of shape (1, n_features); index [0] flattens it.
     raw_shap = pd.Series(explainer.shap_values(X)[0], index=feature_cols)
     top_5_features = raw_shap.abs().sort_values(ascending=False).head(5).index
 
@@ -80,7 +187,10 @@ def predict(request: PredictRequest) -> PredictResponse:
 
     warning = None
     if len(request.readings) < 30:
-        warning = "Fewer than 30 cycles provided — rolling features may be unstable. Accuracy improves with more cycles."
+        warning = (
+            "Fewer than 30 cycles provided — rolling features may be unstable. "
+            "Accuracy improves with more cycles."
+        )
 
     return PredictResponse(
         predicted_rul=predicted_rul,

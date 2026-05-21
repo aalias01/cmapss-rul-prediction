@@ -1,14 +1,21 @@
 """
-FastAPI application — Turbofan RUL Prediction API
+FastAPI application — Turbofan Engine RUL Prediction API.
 
-Run locally:
+This file defines the application instance, CORS configuration, lifespan
+model loading, and all HTTP routes. Route handlers are intentionally thin —
+prediction logic lives in api/predictor.py, and request/response shapes are
+defined in api/schemas.py.
+
+Run locally
+-----------
     uvicorn api.main:app --reload
 
-Endpoints:
-    GET  /          → API info
-    GET  /health    → Health check (Render keep-alive)
-    POST /predict   → RUL prediction + SHAP explanation
-    GET  /docs      → Auto-generated interactive API docs (Swagger UI)
+Endpoints
+---------
+    GET  /          → API metadata (name, version, author, dataset)
+    GET  /health    → Liveness check for Render keep-alive and uptime monitors
+    POST /predict   → RUL prediction + SHAP explanation (see api/schemas.py)
+    GET  /docs      → Auto-generated Swagger UI (FastAPI built-in)
 """
 
 from contextlib import asynccontextmanager
@@ -21,7 +28,14 @@ from api import predictor
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model on startup so first request is fast."""
+    """
+    FastAPI lifespan handler — load the model once at server startup.
+
+    Loading the XGBoost artifact and initialising the SHAP TreeExplainer here
+    ensures the first prediction request is fast. If the model file is not
+    found (e.g. the artifact has not been trained yet), a warning is logged
+    but the server continues running so /health remains reachable.
+    """
     try:
         predictor.load_model()
         print("Model loaded successfully.")
@@ -41,12 +55,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allows the Vercel frontend to call this API
+# CORS — allows the Vercel frontend to call this API from the browser.
+# Update allow_origins with your actual Vercel URL after deployment.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://your-project.vercel.app",  # Update with your Vercel URL
-        "http://localhost:3000",             # Local frontend dev
+        "https://your-project.vercel.app",  # Replace with your Vercel URL after deployment
+        "http://localhost:3000",             # Local frontend dev server
         "http://127.0.0.1:5500",            # VS Code Live Server
     ],
     allow_methods=["GET", "POST"],
@@ -55,7 +70,8 @@ app.add_middleware(
 
 
 @app.get("/")
-def root():
+def root() -> dict:
+    """Return API metadata. Useful for quick sanity checks after deployment."""
     return {
         "name": "Turbofan RUL Predictor API",
         "version": "1.0.0",
@@ -67,19 +83,31 @@ def root():
 
 
 @app.get("/health")
-def health():
-    """Keep-alive endpoint for Render free tier. Also used for uptime monitoring."""
+def health() -> dict:
+    """
+    Liveness check endpoint.
+
+    Used by Render's health check system to confirm the service is running,
+    and by external uptime monitors. Returns immediately without touching
+    the model — always responds even if the model failed to load at startup.
+    """
     return {"status": "ok"}
 
 
 @app.post("/predict", response_model=PredictResponse)
-def predict(request: PredictRequest):
+def predict(request: PredictRequest) -> PredictResponse:
     """
-    Predict remaining useful life from a sequence of sensor readings.
+    Predict remaining useful life from a sequence of turbofan sensor readings.
 
-    - Provide at least 30 cycles of readings for best accuracy
-    - Readings must be ordered earliest to latest
-    - Returns predicted RUL, a confidence band, and top 5 SHAP explanations
+    Accepts an ordered list of per-cycle sensor readings for one engine,
+    applies rolling feature engineering, runs XGBoost inference on the most
+    recent cycle, and returns the predicted RUL with a SHAP-based explanation.
+
+    Provide at least 30 cycles of readings for rolling features to stabilise.
+    Readings must be ordered from the earliest cycle to the most recent.
+
+    Returns a 503 if the model artifact has not been loaded (not trained yet),
+    or a 500 for any unexpected inference error.
     """
     try:
         return predictor.predict(request)
