@@ -225,8 +225,9 @@ The repo ships with a `render.yaml` Blueprint and a `runtime.txt` pinning Python
 │   ├── app.js               ← CSV parsing, API call, RUL gauge, SHAP bars
 │   └── sample_engine.csv    ← Demo file — try the upload flow without your own data
 │
-└── models/                  ← gitignored — trained artifacts
-    └── .gitkeep             ← xgb_rul.joblib lives here after training
+└── models/
+    ├── .gitkeep
+    └── xgb_rul.joblib       ← trained artifact used by Render API
 ```
 
 ---

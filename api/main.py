@@ -62,8 +62,11 @@ app.add_middleware(
     allow_origins=[
         "https://your-project.vercel.app",  # Replace with your Vercel URL after deployment
         "http://localhost:3000",             # Local frontend dev server
+        "http://localhost:5173",             # Vite/static preview fallback
+        "http://localhost:5500",             # Local static server
         "http://127.0.0.1:5500",            # VS Code Live Server
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )

@@ -10,6 +10,9 @@ data/processed/
 *.txt
 *.h5
 
+# Exception: Render needs pip dependencies for deployment
+!requirements.txt
+
 # Exception: ship the demo CSV so the upload workflow is testable end-to-end
 !frontend/sample_engine.csv
 
@@ -40,8 +43,10 @@ env/
 .DS_Store
 Thumbs.db
 
-# Model artifacts (large binary files — regenerate by running notebooks/03_modeling.ipynb)
+# Model artifacts — commit the deployable XGBoost artifact so Render can serve predictions.
+# To regenerate: run notebooks/03_modeling.ipynb.
 *.pkl
-*.joblib
-models/
+models/*.pkl
+models/*
 !models/.gitkeep
+!models/xgb_rul.joblib

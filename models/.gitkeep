@@ -1,0 +1,5 @@
+# Trained model artifacts are stored here.
+# The deployable XGBoost artifact is committed so Render can serve predictions:
+#   xgb_rul.joblib
+#
+# To regenerate: run notebooks/03_modeling.ipynb
