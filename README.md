@@ -15,13 +15,14 @@
 
 ## Key Results
 
-| Model | RMSE (FD001 test set) | vs. BiLSTM benchmark |
-|-------|----------------------|----------------------|
-| Ridge Regression (baseline) | 17.47 | −0.53 |
-| **XGBoost + rolling features** | **15.85** | **−2.15 ✓** |
-| Published BiLSTM benchmark | ~18.0 | — (Zheng et al. 2017) |
+| Model | RMSE (FD001 test set) | Reference |
+|-------|----------------------|-----------|
+| Babu et al. 2016 — CNN | 18.45 | First CNN for RUL on CMAPSS |
+| Ridge Regression (baseline) | 17.47 | This project's linear baseline |
+| Zheng et al. 2017 — deep LSTM | 16.14 | Widely-cited sequence-model benchmark |
+| **XGBoost + rolling features** | **15.85 ✓** | **This project** |
 
-**XGBoost beats the published deep learning benchmark by 2.15 RMSE cycles using only tabular features — no recurrent networks, no sequence padding.**
+**XGBoost edges out the widely-cited Zheng et al. 2017 deep LSTM (16.14) and clears the Babu et al. 2016 CNN (18.45) — using only tabular features, no recurrent networks or sequence padding.** Recent transformer and hybrid CNN-LSTM architectures have since pushed FD001 below ~14 RMSE, so 15.85 is a strong *classical-ML* result rather than current state of the art — a distinction worth stating plainly in an interview.
 
 **Dataset snapshot:** 100 engines × run-to-failure · 20,631 training cycles · 14 informative sensors after dropping 7 near-zero-variance channels · single operating condition (FD001) · RUL capped at 125 cycles per industry convention
 
@@ -104,7 +105,7 @@ frontend/app.js  →  POST /predict  →  api/predictor.py
 | Sensor filtering | Drop 7 near-constant sensors | Near-zero variance = zero predictive signal; confirmed by variance analysis cross-referenced with Saxena & Goebel dataset description |
 | Feature engineering | Rolling mean + std over 30-cycle window per engine | Smooths sensor noise; captures the degradation *trend* rather than instantaneous noise |
 | Train/test split | Grouped by engine unit | Prevents temporal leakage — cycles from the same engine must stay in the same split |
-| Baseline | Linear regression | Establishes a meaningful lower bound for RMSE |
+| Baseline | Ridge regression (L2-regularized) | Establishes a meaningful lower bound for RMSE; L2 stabilizes correlated rolling features |
 | Primary model | XGBoost regressor | Industry-standard for tabular; fast inference; natively compatible with SHAP TreeExplainer |
 | Interpretability | SHAP TreeExplainer | Per-prediction feature attribution; maps dominant features back to known HPC degradation mechanisms |
 | API | FastAPI on Render | Clean JSON interface; Pydantic validation; auto-generated `/docs` Swagger UI |
