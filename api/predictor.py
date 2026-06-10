@@ -16,17 +16,26 @@ Inference pipeline (per request)
                               clip the output, compute SHAP values, and
                               return a structured PredictResponse
 
+SHAP note
+---------
+SHAP values are computed with XGBoost's built-in exact TreeSHAP
+(booster.predict(pred_contribs=True)) rather than the shap package's
+TreeExplainer. The two are mathematically identical for XGBoost models,
+but the shap package's loader cannot parse the base_score format
+serialised by XGBoost >= 3.0 — and skipping the shap dependency keeps
+the Render deployment image small.
+
 Module-level caching
 --------------------
-_model and _explainer are loaded once at server startup (via main.py's
+_model and _booster are loaded once at server startup (via main.py's
 lifespan handler) and reused for every subsequent request. This avoids the
-~200 ms joblib + SHAP initialisation cost on every call.
+~200 ms joblib initialisation cost on every call.
 """
 
 import joblib
-import shap
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from pathlib import Path
 
 from api.schemas import PredictRequest, PredictResponse, ShapEntry
@@ -35,21 +44,24 @@ MODEL_PATH = Path(__file__).parent.parent / "models" / "xgb_rul.joblib"
 
 # Module-level model cache — populated by load_model() at server startup.
 _model = None
-_explainer = None
+_booster = None
 
 
 def load_model() -> None:
     """
-    Load the trained XGBoost model and initialise the SHAP TreeExplainer.
+    Load the trained XGBoost model and cache its underlying Booster.
 
     Called once during server startup via FastAPI's lifespan handler. Raises
     FileNotFoundError if the model artifact does not exist — the caller
     (main.py) catches this and logs a warning rather than crashing the server,
     so the /health endpoint remains available even without a trained model.
 
+    The Booster is cached separately because SHAP values are computed with
+    booster.predict(pred_contribs=True) — XGBoost's built-in exact TreeSHAP.
+
     Side effects
     ------------
-    Sets the module-level _model and _explainer variables.
+    Sets the module-level _model and _booster variables.
 
     Raises
     ------
@@ -57,19 +69,19 @@ def load_model() -> None:
         If models/xgb_rul.joblib is not present. Train the model by running
         notebooks/03_modeling.ipynb first.
     """
-    global _model, _explainer
+    global _model, _booster
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
             f"Model not found at {MODEL_PATH}. "
             "Train the model first by running notebooks/03_modeling.ipynb."
         )
     _model = joblib.load(MODEL_PATH)
-    _explainer = shap.TreeExplainer(_model)
+    _booster = _model.get_booster()
 
 
 def get_model() -> tuple:
     """
-    Return the cached (model, explainer) pair, loading them if necessary.
+    Return the cached (model, booster) pair, loading them if necessary.
 
     Provides a lazy-load fallback for cases where load_model() was not called
     at startup (e.g. during testing). In production, load_model() is always
@@ -77,12 +89,12 @@ def get_model() -> tuple:
 
     Returns
     -------
-    tuple[XGBRegressor, shap.TreeExplainer]
-        The trained model and its associated SHAP explainer.
+    tuple[XGBRegressor, xgboost.Booster]
+        The trained model and its underlying booster (used for SHAP).
     """
     if _model is None:
         load_model()
-    return _model, _explainer
+    return _model, _booster
 
 
 def readings_to_dataframe(request: PredictRequest) -> pd.DataFrame:
@@ -157,7 +169,7 @@ def predict(request: PredictRequest) -> PredictResponse:
         Any unexpected inference error is propagated to the caller (main.py),
         which maps it to an HTTP 500 response.
     """
-    model, explainer = get_model()
+    model, booster = get_model()
 
     df = readings_to_dataframe(request)
 
@@ -171,9 +183,12 @@ def predict(request: PredictRequest) -> PredictResponse:
     raw_pred = float(model.predict(X)[0])
     predicted_rul = int(np.clip(raw_pred, 0, 125))
 
-    # SHAP attribution for this single prediction.
-    # shap_values() returns an array of shape (1, n_features); index [0] flattens it.
-    raw_shap = pd.Series(explainer.shap_values(X)[0], index=feature_cols)
+    # SHAP attribution for this single prediction — XGBoost's built-in exact
+    # TreeSHAP. pred_contribs returns (1, n_features + 1); the final column is
+    # the bias (expected value) term, so it is dropped before ranking.
+    dmat = xgb.DMatrix(X, feature_names=feature_cols)
+    contribs = booster.predict(dmat, pred_contribs=True)[0][:-1]
+    raw_shap = pd.Series(contribs, index=feature_cols)
     top_5_features = raw_shap.abs().sort_values(ascending=False).head(5).index
 
     top_factors = [

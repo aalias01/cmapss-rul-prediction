@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     """
     FastAPI lifespan handler — load the model once at server startup.
 
-    Loading the XGBoost artifact and initialising the SHAP TreeExplainer here
+    Loading the XGBoost artifact and caching its booster (for TreeSHAP) here
     ensures the first prediction request is fast. If the model file is not
     found (e.g. the artifact has not been trained yet), a warning is logged
     but the server continues running so /health remains reachable.

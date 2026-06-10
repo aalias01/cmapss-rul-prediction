@@ -15,7 +15,11 @@ dependencies:
   - ipykernel
   - pip
   - pip:
-      - xgboost>=2.0.0
+      # Pinned: must match requirements.txt — the committed model artifact
+      # (models/xgb_rul.joblib) is a pickle tied to this XGBoost version.
+      - xgboost==3.2.0
+      # shap is used in notebooks only (summary plot); the API uses
+      # XGBoost's built-in TreeSHAP and does not import shap.
       - shap>=0.44.0
       - fastapi>=0.110.0
       - uvicorn[standard]>=0.27.0

@@ -2,7 +2,7 @@
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![XGBoost](https://img.shields.io/badge/XGBoost-2.0%2B-FF6600)](https://xgboost.readthedocs.io/)
-[![SHAP](https://img.shields.io/badge/SHAP-TreeExplainer-7B2FBE)](https://shap.readthedocs.io/)
+[![SHAP](https://img.shields.io/badge/SHAP-exact_TreeSHAP-7B2FBE)](https://shap.readthedocs.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 [![Status: Active](https://img.shields.io/badge/Status-Active-brightgreen)]()
@@ -106,8 +106,8 @@ frontend/app.js  →  POST /predict  →  api/predictor.py
 | Feature engineering | Rolling mean + std over 30-cycle window per engine | Smooths sensor noise; captures the degradation *trend* rather than instantaneous noise |
 | Train/test split | Grouped by engine unit | Prevents temporal leakage — cycles from the same engine must stay in the same split |
 | Baseline | Ridge regression (L2-regularized) | Establishes a meaningful lower bound for RMSE; L2 stabilizes correlated rolling features |
-| Primary model | XGBoost regressor | Industry-standard for tabular; fast inference; natively compatible with SHAP TreeExplainer |
-| Interpretability | SHAP TreeExplainer | Per-prediction feature attribution; maps dominant features back to known HPC degradation mechanisms |
+| Primary model | XGBoost regressor | Industry-standard for tabular; fast inference; native exact TreeSHAP support |
+| Interpretability | Exact TreeSHAP (XGBoost `pred_contribs`) | Per-prediction feature attribution without the shap package's XGBoost 3.x loader incompatibility; maps dominant features back to known HPC degradation mechanisms |
 | API | FastAPI on Render | Clean JSON interface; Pydantic validation; auto-generated `/docs` Swagger UI |
 | Frontend | Vanilla HTML/CSS/JS on Vercel | Professional UI without framework overhead; full control over UX |
 
