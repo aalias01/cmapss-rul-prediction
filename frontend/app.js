@@ -1,5 +1,4 @@
-// Update this URL after deploying to Render
-const API_BASE = "https://your-api.onrender.com";
+const API_BASE = "https://cmapss-rul-api.onrender.com";
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
 const uploadZone  = document.getElementById("uploadZone");
