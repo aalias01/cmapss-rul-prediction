@@ -60,7 +60,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://your-project.vercel.app",  # Replace with your Vercel URL after deployment
+        "https://cmapss-rul-prediction.vercel.app",  # Production frontend
         "http://localhost:3000",             # Local frontend dev server
         "http://localhost:5173",             # Vite/static preview fallback
         "http://localhost:5500",             # Local static server

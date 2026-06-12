@@ -9,7 +9,7 @@
 
 > **Given a sequence of turbofan sensor readings, predict cycles remaining before engine failure — with per-prediction SHAP explanations that map directly to known HPC degradation physics.**
 
-🔗 **[Live Demo](https://your-project.vercel.app)** &nbsp;|&nbsp; 📡 **[API Docs](https://cmapss-rul-api.onrender.com/docs)**
+🔗 **[Live Demo](https://cmapss-rul-prediction.vercel.app)** &nbsp;|&nbsp; 📡 **[API Docs](https://cmapss-rul-api.onrender.com/docs)**
 
 ---
 
