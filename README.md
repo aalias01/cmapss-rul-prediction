@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 [![Status: Active](https://img.shields.io/badge/Status-Active-brightgreen)]()
 
-> **Given a sequence of turbofan sensor readings, predict cycles remaining before engine failure — with per-prediction SHAP explanations that map directly to known HPC degradation physics.**
+> **Given a sequence of turbofan sensor readings, predict cycles remaining before engine failure. Per-prediction SHAP explanations map directly to known HPC degradation physics.**
 
 🔗 **[Live Demo](https://cmapss-rul-prediction.vercel.app)** &nbsp;|&nbsp; 📡 **[API Docs](https://cmapss-rul-api.onrender.com/docs)**
 
@@ -55,14 +55,6 @@
 </p>
 
 *Above: SHAP beeswarm for the top 15 features across 300 training samples. Red = high feature value, blue = low. For `sensor_3_mean30`: red dots (high temperature) push predictions left (shorter RUL) — the expected signature of HPC fouling.*
-
----
-
-## Problem Statement
-
-Turbofan engines degrade over time through compressor fouling, thermal stress, and mechanical wear. Unplanned failures are catastrophic — in aerospace, a missed failure costs lives; in industrial settings, it costs millions in unplanned downtime. The core question: **given a sequence of sensor readings from an operating engine, how many cycles remain before it fails?**
-
-This is the Remaining Useful Life (RUL) prediction problem, a foundational challenge in predictive maintenance across aerospace, manufacturing, and energy. The NASA CMAPSS dataset provides a clean, benchmarked version: 100 engines each run to failure, 21 sensors sampled every cycle, with true RUL labels for evaluation.
 
 ---
 
