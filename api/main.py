@@ -60,7 +60,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://cmapss-rul-prediction.vercel.app",  # Production frontend
+        "https://turbofan.alvinalias.com",           # canonical demo (Primary)
+        "https://cmapss-rul-prediction.vercel.app",  # legacy, 308-redirects to subdomain
         "http://localhost:3000",             # Local frontend dev server
         "http://localhost:5173",             # Vite/static preview fallback
         "http://localhost:5500",             # Local static server
