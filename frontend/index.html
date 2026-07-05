@@ -57,6 +57,7 @@
         <span class="np-sep" aria-hidden="true">·</span>
         <span class="np-statusline mono" id="statusLine" role="status">server waking, first run can take a minute</span>
       </p>
+      <div class="warmup-slot warmup-slot-compact hidden" id="nameplateWarmup"></div>
     </div>
 
     <button class="shop-toggle" id="shopToggle" type="button" role="switch" aria-checked="false" aria-label="Switch to night shop" title="Day / night shop">
@@ -84,6 +85,8 @@
     <div class="fp-traces" id="traces" aria-label="Sensor traces of the loaded engine" role="img"></div>
 
     <div class="fp-readout">
+      <div class="warmup-slot warmup-slot-full hidden" id="readoutWarmup"></div>
+
       <p class="readout-value">
         <span class="major mono" id="rulValue" aria-hidden="true"></span>
         <span class="readout-unit" id="rulUnit"></span>

@@ -26,10 +26,26 @@ const deflectionEl = document.getElementById("deflection");
 const deflRows = document.getElementById("deflRows");
 
 const statusLine = document.getElementById("statusLine");
+const nameplateWarmupEl = document.getElementById("nameplateWarmup");
+const readoutWarmupEl = document.getElementById("readoutWarmup");
 const shopToggle = document.getElementById("shopToggle");
 const shopLabel = document.getElementById("shopLabel");
 
 const SVGNS = "http://www.w3.org/2000/svg";
+
+const WARMUP_SECONDS = 60;
+const WARMUP_GRACE_MS = 2500;
+const FREE_TIER_TEXT =
+  "This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.";
+const WARMUP_COPY = {
+  sent: "> server was asleep · sent the wake call",
+  counting: "> warm-up estimate counting · this is an estimate, not progress",
+  estimateLabel: "estimated seconds to warm",
+  readyLabel: "ready",
+  awake: (seconds) => `> awake · measured wake time ${seconds} s`,
+  overrunLabel: "seconds elapsed · still starting",
+  overrun: "> past the usual window · still waiting, counting up honestly",
+};
 
 // ── Shop toggle (cookie shop across .alvinalias.com, localStorage fallback) ──
 function currentShop() {
@@ -57,15 +73,23 @@ applyShop(currentShop());
 
 // ── Wake-on-load: ping /health, report state in plain words ──
 async function pingHealth() {
+  const wake = createWarmupController({
+    slot: nameplateWarmupEl,
+    compact: true,
+    onShow: () => { statusLine.textContent = "model waking, first run may take up to a minute"; },
+  });
   try {
     const res = await fetch(`${API_BASE}/health`, { method: "GET" });
     if (res.ok) {
       const j = await res.json().catch(() => ({}));
+      wake.ready();
       statusLine.textContent = j.model_loaded === true ? "model awake" : "server reachable";
     } else {
+      wake.cancel();
       statusLine.textContent = "server unreachable right now";
     }
   } catch (e) {
+    wake.cancel();
     statusLine.textContent = "server unreachable right now";
   }
 }
@@ -140,11 +164,10 @@ function parseCSV(text) {
 }
 
 // ── Run log ──
-let coldLine = null;
+let activeRunWarmup = null;
 function clearLog() {
   logEl.innerHTML = "";
-  coldLine = null;
-  hideColdNote();
+  dismissRunWarmup();
 }
 function addLog(text, cls) {
   const span = document.createElement("span");
@@ -154,34 +177,273 @@ function addLog(text, cls) {
   return span;
 }
 
-// ── Cold-start waiting state ──
-let coldNote = null;
-let pendingTimer = null;
-function showColdNote() {
-  if (coldNote) return;
-  coldNote = document.createElement("p");
-  coldNote.className = "cold-note";
-  coldNote.textContent =
-    "This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.";
-  logEl.after(coldNote);
+// ── Warm-up meter ──
+function dismissRunWarmup() {
+  if (activeRunWarmup) {
+    activeRunWarmup.cancel();
+    activeRunWarmup = null;
+  }
 }
-function hideColdNote() {
-  if (coldNote) { coldNote.remove(); coldNote = null; }
+
+function formatWakeSeconds(ms) {
+  const seconds = ms / 1000;
+  return seconds >= 10 ? String(Math.round(seconds)) : seconds.toFixed(1);
 }
-function startPending() {
-  const start = performance.now();
-  pendingTimer = setInterval(() => {
-    const s = Math.round((performance.now() - start) / 1000);
-    if (s >= 3) {
-      showColdNote();
-      if (!coldLine) coldLine = addLog("", "log-cold");
-      coldLine.textContent = `> first start after a sleep · elapsed ${s} s`;
+
+function buildWarmupView(slot, compact) {
+  const node = document.createElement("div");
+  node.className = `warmup-meter ${compact ? "warmup-compact" : "warmup-full"}`;
+  node.setAttribute("role", "status");
+  node.setAttribute("aria-live", "polite");
+
+  const head = document.createElement("div");
+  head.className = "warmup-head";
+
+  const value = document.createElement("span");
+  value.className = "warmup-value mono";
+
+  const label = document.createElement("span");
+  label.className = "warmup-label";
+
+  head.append(value, label);
+
+  const scale = document.createElement("div");
+  scale.className = "warmup-scale";
+  scale.setAttribute("role", "img");
+
+  const svg = document.createElementNS(SVGNS, "svg");
+  const W = 600, H = compact ? 42 : 56, baseY = compact ? 20 : 28;
+  const padL = 8, padR = 8;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("aria-hidden", "true");
+
+  const x = (seconds) => padL + (seconds / WARMUP_SECONDS) * (W - padL - padR);
+  const mk = (tag, attrs, cls) => {
+    const el = document.createElementNS(SVGNS, tag);
+    if (cls) el.setAttribute("class", cls);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
+
+  svg.appendChild(
+    mk("line", { x1: x(0), y1: baseY, x2: x(WARMUP_SECONDS), y2: baseY }, "wm-base"),
+  );
+
+  for (let s = 0; s <= WARMUP_SECONDS; s += 5) {
+    const major = s % 15 === 0;
+    svg.appendChild(
+      mk("line", {
+        x1: x(s), y1: baseY, x2: x(s), y2: baseY + (major ? 10 : 6),
+      }, major ? "wm-tick-major" : "wm-tick-minor"),
+    );
+    if (major) {
+      const t = mk("text", { x: x(s), y: baseY + 24, "text-anchor": "middle" }, "wm-num");
+      t.textContent = s;
+      svg.appendChild(t);
     }
-  }, 500);
+  }
+
+  const marker = mk(
+    "polygon",
+    { points: `0,${baseY - 2} -6,${baseY - 14} 6,${baseY - 14}` },
+    "wm-marker",
+  );
+  svg.appendChild(marker);
+  scale.appendChild(svg);
+
+  const log = document.createElement("div");
+  log.className = "warmup-log mono";
+
+  const note = document.createElement("p");
+  note.className = "warmup-note";
+  note.textContent = FREE_TIER_TEXT;
+  if (compact) note.hidden = true;
+
+  node.append(head, scale, log, note);
+  slot.innerHTML = "";
+  slot.appendChild(node);
+  slot.classList.remove("hidden");
+
+  let markerSeconds = WARMUP_SECONDS;
+  let markerAnim = null;
+
+  function markerX(seconds) {
+    return x(Math.max(0, Math.min(WARMUP_SECONDS, seconds)));
+  }
+  function setMarker(seconds, overrun, animate) {
+    const from = markerX(markerSeconds);
+    const to = markerX(seconds);
+    markerSeconds = seconds;
+    marker.classList.toggle("wm-marker-red", overrun);
+    if (markerAnim) cancelAnimationFrame(markerAnim);
+    if (!animate || REDUCED_MOTION) {
+      marker.setAttribute("transform", `translate(${to} 0)`);
+      return;
+    }
+    const started = performance.now();
+    const step = (now) => {
+      const pct = Math.min(1, (now - started) / 420);
+      const eased = 1 - Math.pow(1 - pct, 3);
+      marker.setAttribute("transform", `translate(${from + (to - from) * eased} 0)`);
+      if (pct < 1) markerAnim = requestAnimationFrame(step);
+    };
+    markerAnim = requestAnimationFrame(step);
+  }
+
+  function setLogs(lines) {
+    log.innerHTML = "";
+    lines.forEach((line) => {
+      const span = document.createElement("span");
+      span.className = "warmup-log-line";
+      span.textContent = line;
+      log.appendChild(span);
+    });
+  }
+
+  function update(state) {
+    value.textContent = state.value;
+    label.textContent = state.label;
+    setLogs(state.logs);
+    setMarker(state.markerSeconds, state.overrun, state.animate);
+    scale.setAttribute(
+      "aria-label",
+      `${state.value} ${state.label}. Scale from 0 to 60 seconds.`,
+    );
+  }
+
+  function remove() {
+    if (markerAnim) cancelAnimationFrame(markerAnim);
+    slot.innerHTML = "";
+    slot.classList.add("hidden");
+  }
+
+  return { node, update, remove };
 }
-function stopPending() {
-  if (pendingTimer) { clearInterval(pendingTimer); pendingTimer = null; }
-  hideColdNote();
+
+function createWarmupController(opts) {
+  const started = performance.now();
+  const slot = opts.slot;
+  const compact = opts.compact === true;
+  let view = null;
+  let done = false;
+  let overrunLogged = false;
+  let tickTimer = null;
+  let graceTimer = null;
+  let retireTimer = null;
+  let interactionCleanup = null;
+
+  function elapsedMs() {
+    return performance.now() - started;
+  }
+
+  function updateCounting() {
+    if (!view || done) return;
+    const elapsed = Math.floor(elapsedMs() / 1000);
+    if (elapsed >= WARMUP_SECONDS) {
+      if (!overrunLogged) overrunLogged = true;
+      view.update({
+        value: String(elapsed),
+        label: WARMUP_COPY.overrunLabel,
+        markerSeconds: 0,
+        overrun: true,
+        animate: false,
+        logs: [WARMUP_COPY.sent, WARMUP_COPY.overrun],
+      });
+      return;
+    }
+    const remaining = Math.max(0, WARMUP_SECONDS - elapsed);
+    view.update({
+      value: String(remaining),
+      label: WARMUP_COPY.estimateLabel,
+      markerSeconds: remaining,
+      overrun: false,
+      animate: false,
+      logs: [WARMUP_COPY.sent, WARMUP_COPY.counting],
+    });
+  }
+
+  function show() {
+    if (done || view) return;
+    view = buildWarmupView(slot, compact);
+    if (opts.onShow) opts.onShow();
+    updateCounting();
+    tickTimer = setInterval(updateCounting, 1000);
+  }
+
+  graceTimer = setTimeout(show, WARMUP_GRACE_MS);
+
+  function clearTimers() {
+    if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (retireTimer) { clearTimeout(retireTimer); retireTimer = null; }
+    if (interactionCleanup) { interactionCleanup(); interactionCleanup = null; }
+  }
+
+  function retire() {
+    if (!view) return;
+    clearTimers();
+    if (REDUCED_MOTION) {
+      view.remove();
+      view = null;
+      return;
+    }
+    view.node.classList.add("warmup-retiring");
+    retireTimer = setTimeout(() => {
+      if (view) {
+        view.remove();
+        view = null;
+      }
+    }, 280);
+  }
+
+  function armRetirement() {
+    if (!view) return;
+    if (REDUCED_MOTION) {
+      retire();
+      return;
+    }
+    const interaction = () => retire();
+    document.addEventListener("pointerdown", interaction, { once: true });
+    document.addEventListener("keydown", interaction, { once: true });
+    interactionCleanup = () => {
+      document.removeEventListener("pointerdown", interaction);
+      document.removeEventListener("keydown", interaction);
+    };
+    retireTimer = setTimeout(retire, 4000);
+  }
+
+  return {
+    ready() {
+      if (done) return null;
+      done = true;
+      if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; }
+      if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+      const measured = formatWakeSeconds(elapsedMs());
+      const line = WARMUP_COPY.awake(measured);
+      if (view) {
+        view.update({
+          value: "0",
+          label: WARMUP_COPY.readyLabel,
+          markerSeconds: 0,
+          overrun: false,
+          animate: true,
+          logs: [line],
+        });
+        armRetirement();
+        return line;
+      }
+      return null;
+    },
+    cancel() {
+      done = true;
+      clearTimers();
+      if (view) {
+        view.remove();
+        view = null;
+      }
+    },
+  };
 }
 
 // ── Traces (sensors 3, 2, 11 per the dialect) ──
@@ -383,7 +645,10 @@ async function predict(readings, meta) {
   resetReadout();
   setBusy(true);
   addLog("> sent to model");
-  startPending();
+  activeRunWarmup = createWarmupController({
+    slot: readoutWarmupEl,
+    compact: false,
+  });
   const t0 = performance.now();
 
   try {
@@ -393,6 +658,10 @@ async function predict(readings, meta) {
       body: JSON.stringify({ readings }),
     });
 
+    const wakeLine = activeRunWarmup ? activeRunWarmup.ready() : null;
+    activeRunWarmup = null;
+    if (wakeLine) addLog(wakeLine);
+
     if (!res.ok) {
       let detail = "";
       try {
@@ -401,19 +670,17 @@ async function predict(readings, meta) {
           ? err.detail
           : Array.isArray(err.detail) ? err.detail.map((d) => d.msg).join("; ") : "";
       } catch (e) {}
-      stopPending();
       showError(`The model could not score this file. ${detail} Check the columns against the sample CSV and try again.`);
       return;
     }
 
     const data = await res.json();
-    stopPending();
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     addLog(`> answered in ${secs} s`);
     renderResult(data, meta);
     statusLine.textContent = "model awake";
   } catch (e) {
-    stopPending();
+    dismissRunWarmup();
     showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
   } finally {
     setBusy(false);

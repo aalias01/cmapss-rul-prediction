@@ -200,12 +200,79 @@ a:hover { text-decoration: none; }
 }
 .fp-log .log-line { display: block; }
 .fp-log .log-cold { color: var(--ink); }
-.cold-note {
-  margin: 10px 0 0;
-  font-family: var(--sans);
+
+/* ── Warm-up meter ── */
+.warmup-slot { width: 100%; }
+.warmup-slot-compact { max-width: 260px; margin-top: 3px; }
+.warmup-slot-full { margin: 0 0 18px; }
+.warmup-meter {
+  color: var(--ink);
+  transition: opacity 0.28s ease;
+}
+.warmup-retiring { opacity: 0; }
+.warmup-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+.warmup-value {
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.warmup-full .warmup-value { font-size: clamp(2.5rem, 7vw, 4.2rem); }
+.warmup-compact .warmup-value { font-size: 1.55rem; }
+.warmup-label {
+  color: var(--ink);
+  font-size: var(--fs-title);
+}
+.warmup-compact .warmup-label {
   font-size: var(--fs-small);
   color: var(--ink-2);
-  max-width: 42ch;
+}
+.warmup-scale { width: 100%; margin-top: 8px; }
+.warmup-scale svg {
+  width: 100%;
+  height: 56px;
+  display: block;
+  overflow: visible;
+}
+.warmup-compact .warmup-scale svg { height: 40px; }
+.warmup-scale .wm-base {
+  stroke: var(--ink);
+  stroke-width: var(--w-object);
+}
+.warmup-scale .wm-tick-major {
+  stroke: var(--ink);
+  stroke-width: 1.4;
+}
+.warmup-scale .wm-tick-minor {
+  stroke: var(--hair);
+  stroke-width: 1;
+}
+.warmup-scale .wm-num {
+  fill: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.warmup-scale .wm-marker { fill: var(--ink); }
+.warmup-scale .wm-marker-red { fill: var(--red); }
+.warmup-log {
+  margin-top: 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-note);
+  white-space: pre-wrap;
+}
+.warmup-compact .warmup-log {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.warmup-log-line { display: block; }
+.warmup-note {
+  margin: 12px 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  max-width: 64ch;
 }
 
 /* ── Traces ── */
@@ -364,6 +431,10 @@ a:hover { text-decoration: none; }
   .footer { padding: 16px 18px 40px; }
   .defl-row { grid-template-columns: 1fr auto; }
   .defl-track { grid-column: 1 / -1; order: 3; }
+  .warmup-slot-compact { max-width: none; }
+  .warmup-head { gap: 12px; flex-wrap: wrap; }
+  .warmup-full .warmup-value { font-size: 3rem; }
+  .warmup-full .warmup-label { font-size: var(--fs-body); }
 }
 
 /* ── Reduced motion ── */
