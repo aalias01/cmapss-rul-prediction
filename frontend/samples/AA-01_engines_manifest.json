@@ -1,0 +1,75 @@
+{
+ "note": "Real FD001 test engines. official_rul is the ground truth from RUL_FD001.txt, revealed only after the model commits. Copy these files plus this manifest into cmapss_rul/frontend/samples/ during implementation.",
+ "engines": [
+  {
+   "file": "engine_034.csv",
+   "engine_unit": 34,
+   "cycles": 203,
+   "official_rul": 7,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_056.csv",
+   "engine_unit": 56,
+   "cycles": 136,
+   "official_rul": 15,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_053.csv",
+   "engine_unit": 53,
+   "cycles": 164,
+   "official_rul": 26,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_046.csv",
+   "engine_unit": 46,
+   "cycles": 146,
+   "official_rul": 47,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_098.csv",
+   "engine_unit": 98,
+   "cycles": 121,
+   "official_rul": 59,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_015.csv",
+   "engine_unit": 15,
+   "cycles": 76,
+   "official_rul": 83,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_006.csv",
+   "engine_unit": 6,
+   "cycles": 105,
+   "official_rul": 93,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_060.csv",
+   "engine_unit": 60,
+   "cycles": 147,
+   "official_rul": 100,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_075.csv",
+   "engine_unit": 75,
+   "cycles": 88,
+   "official_rul": 113,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  },
+  {
+   "file": "engine_026.csv",
+   "engine_unit": 26,
+   "cycles": 76,
+   "official_rul": 119,
+   "source": "data/raw/test_FD001.txt + RUL_FD001.txt, NASA CMAPSS FD001 official test set"
+  }
+ ]
+}

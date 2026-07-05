@@ -23,7 +23,6 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error
 from xgboost import XGBRegressor
 
-
 TARGET = "rul"
 
 # Columns excluded from the feature matrix regardless of what is present.

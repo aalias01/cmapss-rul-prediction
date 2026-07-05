@@ -1,16 +1,20 @@
 # Deployment only — Render (pip-based, no conda)
 # For local development, use: conda env create -f environment.yml
+#
+# Versions pinned 2026-07-04 from a local resolution that passes the test
+# suite (tests/, run under Python 3.11.9). Confirm these against the Render
+# build log and adjust if Render resolves anything differently.
 
-fastapi>=0.110.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.0.0
-python-multipart>=0.0.9
-pandas>=2.0.0
-numpy>=1.24.0
-scikit-learn>=1.3.0
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+python-multipart==0.0.27
+pandas==3.0.2
+numpy==2.4.3
+scikit-learn==1.8.0
 # Pinned to the version that trained models/xgb_rul.joblib — the pickled
 # XGBRegressor must load under a compatible XGBoost at inference time.
 xgboost==3.2.0
 # Note: the API does NOT need the shap package — SHAP values come from
 # XGBoost's built-in exact TreeSHAP (booster.predict(pred_contribs=True)).
-joblib>=1.3.0
+joblib==1.5.3

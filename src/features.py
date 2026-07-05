@@ -28,8 +28,6 @@ ROLLING_WINDOW : int
 """
 
 import pandas as pd
-import numpy as np
-
 
 COLUMNS = [
     "unit", "cycle",

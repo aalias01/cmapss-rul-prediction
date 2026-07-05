@@ -13,8 +13,19 @@ data/processed/
 # Exception: Render needs pip dependencies for deployment
 !requirements.txt
 
+# Exception: dev/CI dependencies (pytest, ruff, httpx)
+!requirements-dev.txt
+
 # Exception: ship the demo CSV so the upload workflow is testable end-to-end
 !frontend/sample_engine.csv
+
+# Exception: ship the known-answer sample engines the frontend loads
+!frontend/samples/
+!frontend/samples/*.csv
+
+# Exception: ship the committed test fixture so the suite runs in CI
+!tests/fixtures/
+!tests/fixtures/*.csv
 
 # Exception: runtime.txt pins the Python version for Render deployment
 !runtime.txt
@@ -33,6 +44,12 @@ __pycache__/
 dist/
 build/
 
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
 # Environment
 .env
 .venv/
@@ -50,3 +67,4 @@ models/*.pkl
 models/*
 !models/.gitkeep
 !models/xgb_rul.joblib
+!models/MODEL_CARD.md

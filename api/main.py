@@ -13,17 +13,36 @@ Run locally
 Endpoints
 ---------
     GET  /          → API metadata (name, version, author, dataset)
-    GET  /health    → Liveness check for Render keep-alive and uptime monitors
+    GET  /health    → Liveness check plus model_loaded / n_features status
     POST /predict   → RUL prediction + SHAP explanation (see api/schemas.py)
     GET  /docs      → Auto-generated Swagger UI (FastAPI built-in)
 """
 
+import logging
+import time
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.schemas import PredictRequest, PredictResponse
 from api import predictor
+from api.schemas import PredictRequest, PredictResponse
+
+# Log through uvicorn's error logger so per-request timing lines appear in the
+# server output without a separate logging config.
+logger = logging.getLogger("uvicorn.error")
+
+
+def _log_predict(status_code: int, cycles_provided: int, started: float) -> None:
+    """Log one line per /predict call: status, cycle count, latency in ms.
+
+    Only the cycle count is recorded, never the payload contents.
+    """
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    logger.info(
+        "predict status=%s cycles_provided=%s ms=%s",
+        status_code, cycles_provided, elapsed_ms,
+    )
 
 
 @asynccontextmanager
@@ -93,9 +112,25 @@ def health() -> dict:
 
     Used by Render's health check system to confirm the service is running,
     and by external uptime monitors. Returns immediately without touching
-    the model — always responds even if the model failed to load at startup.
+    the model on the request path — it only reads the cached module globals,
+    so it always responds even if the model failed to load at startup.
+
+    Fields
+    ------
+    status : str
+        Always "ok" while the server is up (backward compatible).
+    model_loaded : bool
+        Whether the XGBoost artifact is loaded and ready to serve predictions.
+    n_features : int | None
+        Number of features the booster expects, or null when no model is loaded.
     """
-    return {"status": "ok"}
+    model_loaded = predictor._model is not None
+    n_features = (
+        len(predictor._booster.feature_names)
+        if model_loaded and predictor._booster is not None
+        else None
+    )
+    return {"status": "ok", "model_loaded": model_loaded, "n_features": n_features}
 
 
 @app.post("/predict", response_model=PredictResponse)
@@ -113,9 +148,14 @@ def predict(request: PredictRequest) -> PredictResponse:
     Returns a 503 if the model artifact has not been loaded (not trained yet),
     or a 500 for any unexpected inference error.
     """
+    started = time.perf_counter()
     try:
-        return predictor.predict(request)
+        response = predictor.predict(request)
     except FileNotFoundError as e:
+        _log_predict(503, len(request.readings), started)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
+        _log_predict(500, len(request.readings), started)
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+    _log_predict(200, response.cycles_provided, started)
+    return response

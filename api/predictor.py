@@ -32,11 +32,12 @@ lifespan handler) and reused for every subsequent request. This avoids the
 ~200 ms joblib initialisation cost on every call.
 """
 
+from pathlib import Path
+
 import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from pathlib import Path
 
 from api.schemas import PredictRequest, PredictResponse, ShapEntry
 
@@ -206,6 +207,15 @@ def predict(request: PredictRequest) -> PredictResponse:
             "Fewer than 30 cycles provided — rolling features may be unstable. "
             "Accuracy improves with more cycles."
         )
+
+    # Cycle-order guard: readings are assumed earliest-to-latest. If the cycle
+    # numbers are not non-decreasing, honour the request as given but say so.
+    cycles = [r.cycle for r in request.readings]
+    if any(b < a for a, b in zip(cycles, cycles[1:])):
+        order_note = (
+            "Cycle numbers are not in increasing order; readings were used as given."
+        )
+        warning = order_note if warning is None else f"{warning} {order_note}"
 
     return PredictResponse(
         predicted_rul=predicted_rul,

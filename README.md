@@ -2,8 +2,9 @@
 
 Predicts how many cycles a turbofan engine has left before failure, from raw sensor readings. XGBoost with rolling-window features reaches 15.85 RMSE on the official FD001 test set, ahead of the widely cited Zheng et al. 2017 deep LSTM (16.14), using tabular features only. Per-prediction SHAP output maps to known HPC degradation physics.
 
+[![CI](https://github.com/aalias01/cmapss-rul-prediction/actions/workflows/ci.yml/badge.svg)](https://github.com/aalias01/cmapss-rul-prediction/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![XGBoost](https://img.shields.io/badge/XGBoost-2.0%2B-FF6600)](https://xgboost.readthedocs.io/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-3.2-FF6600)](https://xgboost.readthedocs.io/)
 [![SHAP](https://img.shields.io/badge/SHAP-exact_TreeSHAP-7B2FBE)](https://shap.readthedocs.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
@@ -28,6 +29,8 @@ Dataset: 100 engines run to failure, 20,631 training cycles, 14 informative sens
   &nbsp;&nbsp;
   <img src="figures/04_shap_bar.png" width="420" alt="Top 10 SHAP features by mean absolute value">
 </p>
+
+Training data, features, evaluation, and limitations are documented in the [model card](models/MODEL_CARD.md).
 
 ## Design decisions
 
@@ -66,7 +69,7 @@ The API validates inputs with Pydantic before any inference runs and returns a c
 
 ## Tech stack
 
-Python 3.11, Pandas, NumPy, scikit-learn (Ridge baseline, grouped splits), XGBoost 2.0+, exact TreeSHAP via `pred_contribs`, FastAPI + Pydantic on Render, vanilla HTML/CSS/JS on Vercel. Pins in `environment.yml` (conda, local) and `requirements.txt` (pip, Render).
+Python 3.11, Pandas, NumPy, scikit-learn (Ridge baseline, grouped splits), XGBoost 3.2 (pinned to the training version), exact TreeSHAP via `pred_contribs`, FastAPI + Pydantic on Render, vanilla HTML/CSS/JS on Vercel. Pins in `environment.yml` (conda, local) and `requirements.txt` (pip, Render).
 
 ## Run it locally
 
@@ -98,7 +101,14 @@ uvicorn api.main:app --reload
 # docs at http://localhost:8000/docs
 ```
 
-Open `frontend/index.html` in a browser and set `API_BASE` in `frontend/app.js` to `http://localhost:8000`. `frontend/sample_engine.csv` lets you try the upload flow without your own data.
+Run the test suite (offline, against the committed model artifact):
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+Open `frontend/index.html` in a browser. `frontend/app.js` has a hardcoded `API_BASE`; for local development, point a temporary copy of it at `http://localhost:8000`. The known-answer run picks one of the ten real NASA test engines in `frontend/samples/`, calls the model, and prints the model's error against that engine's official answer. The upload path takes your own CSV in the same columns as `frontend/sample_engine.csv`.
 
 ## Limitations
 

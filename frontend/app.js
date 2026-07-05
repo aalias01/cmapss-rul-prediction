@@ -1,347 +1,505 @@
-// DWG AA-101 · Turbofan RUL frontend.
+// AA-2026-01 · Remaining useful life (turbofan). Telemetry bench.
 // API wiring (endpoint, payload, response parsing) is unchanged from the
-// previous issue of this page. Presentation follows design_language_spec.md.
+// prior issue: the hardcoded production constant below is the contract.
 
 const API_BASE = "https://cmapss-rul-api.onrender.com";
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ── DOM refs ──
-const uploadZone = document.getElementById("uploadZone");
-const fileInput  = document.getElementById("fileInput");
-const fileInfo   = document.getElementById("fileInfo");
-const fileName   = document.getElementById("fileName");
-const fileRows   = document.getElementById("fileRows");
-const predictBtn = document.getElementById("predictBtn");
-const loadSample = document.getElementById("loadSample");
+const runKnownBtn = document.getElementById("runKnown");
+const uploadBtn = document.getElementById("uploadBtn");
+const fileInput = document.getElementById("fileInput");
+const logEl = document.getElementById("log");
+const tracesEl = document.getElementById("traces");
 
-const tracesEmpty  = document.getElementById("tracesEmpty");
-const tracesEl     = document.getElementById("traces");
-const loadingState = document.getElementById("loadingState");
-const resultState  = document.getElementById("resultState");
-const errorBox     = document.getElementById("errorBox");
-const errorText    = document.getElementById("errorText");
+const rulValue = document.getElementById("rulValue");
+const rulUnit = document.getElementById("rulUnit");
+const rulRange = document.getElementById("rulRange");
+const scaleEl = document.getElementById("scale");
+const truthLine = document.getElementById("truthLine");
+const errorBox = document.getElementById("errorBox");
+const errorText = document.getElementById("errorText");
+const warnBox = document.getElementById("warnBox");
+const warnText = document.getElementById("warnText");
+const deflectionEl = document.getElementById("deflection");
+const deflRows = document.getElementById("deflRows");
 
-const rulValue   = document.getElementById("rulValue");
-const rulBand    = document.getElementById("rulBand");
-const shapBars   = document.getElementById("shapBars");
-const warningBox = document.getElementById("warningBox");
-const warningText = document.getElementById("warningText");
+const statusLine = document.getElementById("statusLine");
+const shopToggle = document.getElementById("shopToggle");
+const shopLabel = document.getElementById("shopLabel");
 
-const pendingElapsed = document.getElementById("pendingElapsed");
-const pendingLine    = document.getElementById("pendingLine");
+const SVGNS = "http://www.w3.org/2000/svg";
 
-// ── Theme switch (same approach as portfolio_site) ──
-const modeBtn = document.getElementById("mode-switch");
-function reflectTheme() {
-  const t = document.documentElement.getAttribute("data-theme") || "light";
+// ── Shop toggle (cookie shop across .alvinalias.com, localStorage fallback) ──
+function currentShop() {
+  return document.documentElement.getAttribute("data-theme") === "night" ? "night" : "day";
+}
+function applyShop(shop) {
+  const night = shop === "night";
+  document.documentElement.setAttribute("data-theme", shop);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", t === "dark" ? "#191a17" : "#f5f4ef");
-  if (!modeBtn) return;
-  modeBtn.setAttribute("aria-checked", t === "dark" ? "true" : "false");
-  modeBtn.setAttribute("aria-label", t === "dark" ? "Switch to day mode" : "Switch to night mode");
+  if (meta) meta.setAttribute("content", night ? "#201f1c" : "#f5f4ef");
+  shopToggle.setAttribute("aria-checked", night ? "true" : "false");
+  shopToggle.setAttribute("aria-label", night ? "Switch to day shop" : "Switch to night shop");
+  shopLabel.textContent = night ? "day shop" : "night shop";
 }
-modeBtn?.addEventListener("click", () => {
-  const cur = document.documentElement.getAttribute("data-theme") || "light";
-  const next = cur === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", next);
-  try { localStorage.setItem("theme", next); } catch (e) {}
-  reflectTheme();
+function persistShop(shop) {
+  try { document.cookie = `shop=${shop}; domain=.alvinalias.com; path=/; max-age=31536000; SameSite=Lax`; } catch (e) {}
+  try { localStorage.setItem("shop", shop); } catch (e) {}
+}
+shopToggle.addEventListener("click", () => {
+  const next = currentShop() === "night" ? "day" : "night";
+  applyShop(next);
+  persistShop(next);
 });
-reflectTheme();
+applyShop(currentShop());
 
-// ── State ──
-let parsedReadings = null;
-
-// ── Upload zone ──
-uploadZone.addEventListener("click", () => fileInput.click());
-uploadZone.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
-});
-uploadZone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  uploadZone.classList.add("drag-over");
-});
-uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("drag-over"));
-uploadZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  uploadZone.classList.remove("drag-over");
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
-});
-fileInput.addEventListener("change", () => {
-  if (fileInput.files[0]) handleFile(fileInput.files[0]);
-});
-
-// ── File handling (parse logic unchanged) ──
-function handleFile(file) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const csv = e.target.result;
-    const rows = parseCSV(csv);
-    if (!rows || rows.length === 0) {
-      showError("Could not parse that CSV. Expected a header row plus one row per cycle.");
-      return;
+// ── Wake-on-load: ping /health, report state in plain words ──
+async function pingHealth() {
+  try {
+    const res = await fetch(`${API_BASE}/health`, { method: "GET" });
+    if (res.ok) {
+      const j = await res.json().catch(() => ({}));
+      statusLine.textContent = j.model_loaded === true ? "model awake" : "server reachable";
+    } else {
+      statusLine.textContent = "server unreachable right now";
     }
-    setReadings(rows, file.name);
-  };
-  reader.readAsText(file);
+  } catch (e) {
+    statusLine.textContent = "server unreachable right now";
+  }
 }
 
+// ── Sample engine manifest and rotation (random without repeat) ──
+let engines = [];
+let order = [];
+let ptr = 0;
+let lastIdx = null;
+
+async function loadManifest() {
+  try {
+    const res = await fetch("samples/AA-01_engines_manifest.json");
+    const j = await res.json();
+    engines = j.engines || [];
+    reshuffle();
+  } catch (e) {
+    engines = [];
+  }
+}
+function reshuffle() {
+  order = engines.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const k = Math.floor(Math.random() * (i + 1));
+    [order[i], order[k]] = [order[k], order[i]];
+  }
+  if (lastIdx != null && order.length > 1 && order[0] === lastIdx) {
+    [order[0], order[1]] = [order[1], order[0]];
+  }
+  ptr = 0;
+}
+function nextEngine() {
+  if (engines.length === 0) return null;
+  if (ptr >= order.length) reshuffle();
+  const idx = order[ptr++];
+  lastIdx = idx;
+  return engines[idx];
+}
+
+// ── Feature glosses (from the project copy deck) ──
+const FEATURE_BASE = {
+  sensor_3: "HPC outlet temperature",
+  sensor_2: "LPC outlet temperature",
+  sensor_11: "static pressure ratio",
+  sensor_9: "core speed",
+  sensor_14: "core speed",
+};
+function gloss(feature) {
+  const m = String(feature).match(/^(sensor_\d+)(_mean30|_std30)?$/);
+  if (!m) return feature;
+  const base = FEATURE_BASE[m[1]] || m[1];
+  if (m[2] === "_mean30") return `${base}, 30-cycle mean`;
+  if (m[2] === "_std30") return `${base}, 30-cycle spread`;
+  return base;
+}
+
+// ── CSV parse ──
 function parseCSV(text) {
-  const lines = text.trim().split("\n");
+  const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return null;
   const headers = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line) => {
+  const rows = lines.slice(1).map((line) => {
     const vals = line.split(",").map((v) => v.trim());
     const obj = {};
     headers.forEach((h, i) => {
-      obj[h] = isNaN(vals[i]) ? vals[i] : Number(vals[i]);
+      const n = Number(vals[i]);
+      obj[h] = vals[i] === "" || isNaN(n) ? vals[i] : n;
     });
     return obj;
   });
+  return rows.filter((r) => Object.keys(r).length > 0);
 }
 
-function setReadings(rows, name) {
-  parsedReadings = rows;
-  fileName.textContent = name;
-  fileRows.textContent = `${rows.length} cycles`;
-  fileInfo.classList.remove("hidden");
-  predictBtn.disabled = false;
-  hideError();
-  drawTraces(rows);
+// ── Run log ──
+let coldLine = null;
+function clearLog() {
+  logEl.innerHTML = "";
+  coldLine = null;
+  hideColdNote();
+}
+function addLog(text, cls) {
+  const span = document.createElement("span");
+  span.className = "log-line" + (cls ? " " + cls : "");
+  span.textContent = text;
+  logEl.appendChild(span);
+  return span;
 }
 
-// ── Specimen engine (generation logic unchanged; labeled synthetic on the page) ──
-loadSample.addEventListener("click", (e) => {
-  e.preventDefault();
-  const sample = Array.from({ length: 50 }, (_, i) => {
-    const deg = i / 49;
-    return {
-      cycle:         i + 1,
-      op_setting_1:  -0.0007,
-      op_setting_2:  -0.0004,
-      op_setting_3:  100.0,
-      sensor_2:      641.82 + deg * 2.1 + (Math.random() - 0.5) * 0.4,
-      sensor_3:      1589.70 + deg * 8.5 + (Math.random() - 0.5) * 1.2,
-      sensor_4:      1400.60 + deg * 6.2 + (Math.random() - 0.5) * 1.0,
-      sensor_7:      554.36 - deg * 1.8 + (Math.random() - 0.5) * 0.3,
-      sensor_8:      2388.06 - deg * 5.0 + (Math.random() - 0.5) * 2.0,
-      sensor_9:      9046.19 - deg * 12.0 + (Math.random() - 0.5) * 3.0,
-      sensor_11:     47.47 + deg * 0.4 + (Math.random() - 0.5) * 0.05,
-      sensor_12:     521.66 + deg * 3.0 + (Math.random() - 0.5) * 0.5,
-      sensor_13:     2388.06 - deg * 4.0 + (Math.random() - 0.5) * 1.5,
-      sensor_14:     8138.62 - deg * 20.0 + (Math.random() - 0.5) * 5.0,
-      sensor_15:     8.4195,
-      sensor_17:     392,
-      sensor_20:     39.06,
-      sensor_21:     23.4190,
-    };
-  });
-  setReadings(sample, "specimen engine (synthetic)");
-});
+// ── Cold-start waiting state ──
+let coldNote = null;
+let pendingTimer = null;
+function showColdNote() {
+  if (coldNote) return;
+  coldNote = document.createElement("p");
+  coldNote.className = "cold-note";
+  coldNote.textContent =
+    "This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.";
+  logEl.after(coldNote);
+}
+function hideColdNote() {
+  if (coldNote) { coldNote.remove(); coldNote = null; }
+}
+function startPending() {
+  const start = performance.now();
+  pendingTimer = setInterval(() => {
+    const s = Math.round((performance.now() - start) / 1000);
+    if (s >= 3) {
+      showColdNote();
+      if (!coldLine) coldLine = addLog("", "log-cold");
+      coldLine.textContent = `> first start after a sleep · elapsed ${s} s`;
+    }
+  }, 500);
+}
+function stopPending() {
+  if (pendingTimer) { clearInterval(pendingTimer); pendingTimer = null; }
+  hideColdNote();
+}
 
-// ── Strip traces: draw the uploaded data as the object ──
-const TRACE_PREFERRED = ["sensor_2", "sensor_3", "sensor_4", "sensor_7", "sensor_11", "sensor_14"];
-
+// ── Traces (sensors 3, 2, 11 per the dialect) ──
+const TRACE_SENSORS = [
+  { key: "sensor_3", n: 3, gloss: "HPC outlet temperature" },
+  { key: "sensor_2", n: 2, gloss: "LPC outlet temperature" },
+  { key: "sensor_11", n: 11, gloss: "static pressure ratio" },
+];
 function drawTraces(rows) {
-  const keys = Object.keys(rows[0]).filter((k) => /^sensor_\d+$/.test(k));
-  let chosen = TRACE_PREFERRED.filter((k) => keys.includes(k));
-  if (chosen.length === 0) chosen = keys.slice(0, 6);
-  chosen = chosen.slice(0, 6);
-  if (chosen.length === 0) { tracesEl.classList.add("hidden"); tracesEmpty.classList.remove("hidden"); return; }
-
   tracesEl.innerHTML = "";
-  const W = 400, H = 26, PAD = 2;
-
-  chosen.forEach((key) => {
-    const vals = rows.map((r) => Number(r[key])).filter((v) => !isNaN(v));
+  const W = 500, H = 30, PAD = 3;
+  TRACE_SENSORS.forEach((s) => {
+    const vals = rows.map((r) => Number(r[s.key])).filter((v) => !isNaN(v));
     if (vals.length < 2) return;
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const span = max - min || 1;
+    const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
     const pts = vals
       .map((v, i) => {
-        const x = (i / (vals.length - 1)) * W;
-        const y = H - PAD - ((v - min) / span) * (H - PAD * 2);
+        const x = PAD + (i / (vals.length - 1)) * (W - 2 * PAD);
+        const y = H - PAD - ((v - min) / span) * (H - 2 * PAD);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(" ");
 
     const row = document.createElement("div");
     row.className = "trace-row";
-    row.dataset.sensor = key;
+    row.dataset.sensor = s.key;
 
-    const name = document.createElement("span");
-    name.className = "trace-name";
-    name.textContent = key;
+    const label = document.createElement("span");
+    label.className = "trace-label";
+    label.textContent = `sensor ${s.n} · ${s.gloss} · last ${vals.length} cycles`;
 
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS(SVGNS, "svg");
     svg.setAttribute("class", "trace-svg");
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.setAttribute("preserveAspectRatio", "none");
     svg.setAttribute("aria-hidden", "true");
-    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+
+    const base = document.createElementNS(SVGNS, "line");
+    base.setAttribute("class", "trace-base");
+    base.setAttribute("x1", PAD); base.setAttribute("y1", H - PAD);
+    base.setAttribute("x2", W - PAD); base.setAttribute("y2", H - PAD);
+
+    const poly = document.createElementNS(SVGNS, "polyline");
     poly.setAttribute("points", pts);
-    svg.appendChild(poly);
 
-    const range = document.createElement("span");
-    range.className = "trace-range";
-    range.textContent = `${fmt(min)}..${fmt(max)}`;
-
-    row.append(name, svg, range);
+    svg.append(base, poly);
+    row.append(label, svg);
     tracesEl.appendChild(row);
   });
-
-  const axis = document.createElement("div");
-  axis.className = "traces-axis";
-  axis.innerHTML = `<span>CYCLE 1</span><span>NORMALIZED PER TRACE</span><span>CYCLE ${rows.length}</span>`;
-  tracesEl.appendChild(axis);
-
-  tracesEmpty.classList.add("hidden");
-  tracesEl.classList.remove("hidden");
 }
 
-function fmt(v) {
-  return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2);
-}
+// ── House scale: 0 to 125 cycles, major every 25, minor every 5 ──
+function drawScale(opts) {
+  const o = opts || {};
+  const W = 500, H = 64, padL = 8, padR = 8;
+  const baseY = 42;
+  const x = (v) => padL + (v / 125) * (W - padL - padR);
 
-// ── Issue-pending timer (measures real elapsed time, nothing else) ──
-let pendingTimer = null;
-let pendingStart = 0;
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("aria-hidden", "true");
 
-function startPending() {
-  pendingStart = performance.now();
-  pendingElapsed.textContent = "ELAPSED 0 s";
-  pendingLine.style.width = "0%";
-  loadingState.classList.remove("hidden");
-  pendingTimer = setInterval(() => {
-    const s = Math.round((performance.now() - pendingStart) / 1000);
-    pendingElapsed.textContent = `ELAPSED ${s} s`;
-    // The line spans the stated 60 s worst case; it measures time, not progress.
-    pendingLine.style.width = `${Math.min((s / 60) * 100, 100)}%`;
-  }, 1000);
-}
+  const mk = (tag, attrs, cls) => {
+    const el = document.createElementNS(SVGNS, tag);
+    if (cls) el.setAttribute("class", cls);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
 
-function stopPending() {
-  clearInterval(pendingTimer);
-  pendingTimer = null;
-  loadingState.classList.add("hidden");
-}
+  svg.appendChild(mk("line", { x1: x(0), y1: baseY, x2: x(125), y2: baseY }, "sc-base"));
 
-// ── Errors ──
-function showError(msg) {
-  errorText.textContent = msg;
-  errorBox.classList.remove("hidden");
-}
-function hideError() {
-  errorBox.classList.add("hidden");
-}
-
-// ── Prediction (API contract unchanged) ──
-predictBtn.addEventListener("click", runPrediction);
-
-async function runPrediction() {
-  if (!parsedReadings) return;
-
-  hideError();
-  resultState.classList.add("hidden");
-  startPending();
-  predictBtn.disabled = true;
-
-  const payload = { readings: parsedReadings };
-
-  try {
-    const res = await fetch(`${API_BASE}/predict`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Prediction failed");
+  for (let v = 0; v <= 125; v += 5) {
+    const major = v % 25 === 0;
+    svg.appendChild(mk("line", {
+      x1: x(v), y1: baseY, x2: x(v), y2: baseY + (major ? 8 : 4),
+    }, major ? "sc-tick-major" : "sc-tick-minor"));
+    if (major) {
+      const t = mk("text", { x: x(v), y: baseY + 20, "text-anchor": "middle" }, "sc-num");
+      t.textContent = v;
+      svg.appendChild(t);
     }
+  }
 
-    const data = await res.json();
-    stopPending();
-    renderResult(data);
-  } catch (err) {
-    stopPending();
-    const friendly = /Failed to fetch|NetworkError|aborted/i.test(err.message || "")
-      ? "Could not reach the API. If this was the first request in a while, the container may still be booting; wait a moment and run the estimate again."
-      : err.message;
-    showError(friendly);
-  } finally {
-    predictBtn.disabled = false;
+  if (typeof o.rul === "number") {
+    // band bracket above the scale
+    if (typeof o.low === "number" && typeof o.high === "number") {
+      const by = 24;
+      svg.appendChild(mk("line", { x1: x(o.low), y1: by, x2: x(o.high), y2: by }, "sc-band"));
+      svg.appendChild(mk("line", { x1: x(o.low), y1: by, x2: x(o.low), y2: by + 5 }, "sc-band"));
+      svg.appendChild(mk("line", { x1: x(o.high), y1: by, x2: x(o.high), y2: by + 5 }, "sc-band"));
+    }
+    // truth: dashed line + label
+    if (typeof o.truth === "number") {
+      svg.appendChild(mk("line", { x1: x(o.truth), y1: 16, x2: x(o.truth), y2: baseY + 8 }, "sc-truth"));
+      const lab = mk("text", { x: x(o.truth), y: 12, "text-anchor": "middle" }, "sc-truth-lab");
+      lab.textContent = `official ${o.truth}`;
+      svg.appendChild(lab);
+    }
+    // marker: filled triangle pointing down onto the baseline
+    const mx = x(o.rul);
+    const tri = mk("polygon", { points: `${mx},${baseY - 2} ${mx - 5},${baseY - 12} ${mx + 5},${baseY - 12}` }, "sc-marker");
+    svg.appendChild(tri);
+  }
+
+  scaleEl.innerHTML = "";
+  scaleEl.appendChild(svg);
+
+  let aria = "Scale from 0 to 125 cycles.";
+  if (typeof o.rul === "number") {
+    aria += ` Estimate ${o.rul}, range ${o.low} to ${o.high}.`;
+    if (typeof o.truth === "number") aria += ` Official answer ${o.truth}.`;
+  }
+  scaleEl.setAttribute("aria-label", aria);
+
+  // Reveal the marker and band once, under 600ms.
+  if (typeof o.rul === "number" && !REDUCED_MOTION) {
+    svg.querySelectorAll(".sc-marker, .sc-band").forEach((el) => { el.style.opacity = "0"; });
+    requestAnimationFrame(() => {
+      svg.querySelectorAll(".sc-marker, .sc-band").forEach((el) => { el.style.opacity = "1"; });
+    });
   }
 }
 
-// ── Render result ──
-function renderResult(data) {
-  const rul = data.predicted_rul;
+// ── Deflection table (side from the API direction field, not the sign) ──
+function renderDeflection(factors) {
+  deflRows.innerHTML = "";
+  const list = factors || [];
+  const maxAbs = Math.max(...list.map((f) => Math.abs(f.value)), 0.001);
 
-  rulValue.textContent = rul;
-  rulBand.textContent = `BAND ${data.confidence_band.low} .. ${data.confidence_band.high} CYCLES`;
-
-  // Attribution: deflections from a zero datum
-  shapBars.innerHTML = "";
-  const factors = data.top_factors || [];
-  const maxAbs = Math.max(...factors.map((f) => Math.abs(f.value)), 0.001);
-
-  factors.forEach((factor) => {
-    const isPos = factor.value > 0;
-    const widthPct = (Math.abs(factor.value) / maxAbs) * 50; // half-track per side
+  list.forEach((f) => {
+    const right = f.direction === "increases_rul";
+    const widthPct = (Math.abs(f.value) / maxAbs) * 50;
 
     const row = document.createElement("div");
     row.className = "defl-row";
-    const sensorMatch = String(factor.feature).match(/^(sensor_\d+)/);
-    if (sensorMatch) row.dataset.sensor = sensorMatch[1];
+    const base = String(f.feature).match(/^(sensor_\d+)/);
+    if (base) row.dataset.sensor = base[1];
 
     const name = document.createElement("span");
     name.className = "defl-name";
-    name.textContent = factor.feature;
-    name.title = "SHAP value from the API response";
+    name.textContent = gloss(f.feature);
+    name.title = `${f.feature} · SHAP value from the API response`;
 
     const track = document.createElement("div");
     track.className = "defl-track";
     const datum = document.createElement("span");
     datum.className = "defl-datum";
     const bar = document.createElement("span");
-    bar.className = `defl-bar ${isPos ? "pos" : "neg"}`;
+    bar.className = `defl-bar ${right ? "pos" : "neg"}`;
     bar.style.width = REDUCED_MOTION ? `${widthPct}%` : "0%";
     track.append(datum, bar);
 
     const val = document.createElement("span");
     val.className = "defl-val";
-    val.textContent = `${isPos ? "+" : ""}${factor.value.toFixed(3)}`;
+    val.textContent = `${f.value > 0 ? "+" : ""}${Number(f.value).toFixed(3)}`;
 
     row.append(name, track, val);
-
-    // Hover a row: trace the sensor in the principal view
     row.addEventListener("mouseenter", () => highlightTrace(row.dataset.sensor, true));
     row.addEventListener("mouseleave", () => highlightTrace(row.dataset.sensor, false));
-
-    shapBars.appendChild(row);
+    deflRows.appendChild(row);
 
     if (!REDUCED_MOTION) {
-      requestAnimationFrame(() => { bar.style.transition = "width 0.4s ease"; bar.style.width = `${widthPct}%`; });
+      requestAnimationFrame(() => { bar.style.width = `${widthPct}%`; });
     }
   });
-
-  // Warning from the API, rendered as a red flag note
-  if (data.warning) {
-    warningText.textContent = data.warning;
-    warningBox.classList.remove("hidden");
-  } else {
-    warningBox.classList.add("hidden");
-  }
-
-  resultState.classList.remove("hidden");
+  deflectionEl.classList.remove("hidden");
 }
-
 function highlightTrace(sensor, on) {
   if (!sensor) return;
   document.querySelectorAll(`.trace-row[data-sensor="${sensor}"]`).forEach((el) => {
     el.classList.toggle("hl", on);
   });
 }
+
+// ── Errors and reset ──
+function showError(msg) {
+  errorText.textContent = msg;
+  errorBox.classList.remove("hidden");
+}
+function resetReadout() {
+  errorBox.classList.add("hidden");
+  warnBox.classList.add("hidden");
+  deflectionEl.classList.add("hidden");
+  truthLine.textContent = "";
+  rulValue.textContent = "";
+  rulUnit.textContent = "";
+  rulRange.textContent = "";
+  drawScale({});
+}
+
+function setBusy(busy) {
+  runKnownBtn.disabled = busy;
+  uploadBtn.disabled = busy;
+}
+
+// ── Prediction (API contract unchanged) ──
+async function predict(readings, meta) {
+  resetReadout();
+  setBusy(true);
+  addLog("> sent to model");
+  startPending();
+  const t0 = performance.now();
+
+  try {
+    const res = await fetch(`${API_BASE}/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ readings }),
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const err = await res.json();
+        detail = typeof err.detail === "string"
+          ? err.detail
+          : Array.isArray(err.detail) ? err.detail.map((d) => d.msg).join("; ") : "";
+      } catch (e) {}
+      stopPending();
+      showError(`The model could not score this file. ${detail} Check the columns against the sample CSV and try again.`);
+      return;
+    }
+
+    const data = await res.json();
+    stopPending();
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    addLog(`> answered in ${secs} s`);
+    renderResult(data, meta);
+    statusLine.textContent = "model awake";
+  } catch (e) {
+    stopPending();
+    showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
+  } finally {
+    setBusy(false);
+  }
+}
+
+function renderResult(data, meta) {
+  const rul = data.predicted_rul;
+  const low = data.confidence_band.low;
+  const high = data.confidence_band.high;
+
+  rulValue.textContent = rul;
+  rulUnit.textContent = "cycles remaining";
+  rulRange.textContent = `range ${low} to ${high}`;
+
+  const hasTruth = meta.kind === "known" && typeof meta.official === "number";
+  drawScale({ rul, low, high, truth: hasTruth ? meta.official : undefined });
+
+  if (hasTruth) {
+    const err = rul - meta.official;
+    const signed = err === 0 ? "0" : (err > 0 ? `+${err}` : `−${Math.abs(err)}`);
+    truthLine.textContent = `Official answer for engine ${meta.unit}: ${meta.official} · model error ${signed} cycles`;
+  } else {
+    truthLine.textContent = "Uploaded data has no official answer to compare. The range still applies.";
+  }
+
+  if (data.warning) {
+    warnText.textContent = data.warning;
+    warnBox.classList.remove("hidden");
+  }
+
+  renderDeflection(data.top_factors);
+}
+
+// ── Run a known engine ──
+runKnownBtn.addEventListener("click", async () => {
+  const eng = nextEngine();
+  if (!eng) {
+    clearLog();
+    showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
+    return;
+  }
+  clearLog();
+  setBusy(true);
+  let rows;
+  try {
+    const res = await fetch(`samples/${eng.file}`);
+    rows = parseCSV(await res.text());
+  } catch (e) {
+    setBusy(false);
+    showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
+    return;
+  }
+  if (!rows || rows.length === 0) {
+    setBusy(false);
+    showError("The model could not score this file. The sample engine could not be read. Check the columns against the sample CSV and try again.");
+    return;
+  }
+  addLog(`> engine ${eng.engine_unit} loaded · ${rows.length} cycles of sensor history`);
+  drawTraces(rows);
+  await predict(rows, { kind: "known", unit: eng.engine_unit, official: eng.official_rul });
+});
+
+// ── Upload your own CSV ──
+uploadBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const rows = parseCSV(e.target.result);
+    if (!rows || rows.length === 0) {
+      clearLog();
+      showError("The model could not score this file. The file had no readable rows. Check the columns against the sample CSV and try again.");
+      return;
+    }
+    clearLog();
+    addLog(`> file ${file.name} loaded · ${rows.length} cycles of sensor history`);
+    drawTraces(rows);
+    predict(rows, { kind: "upload", name: file.name });
+  };
+  reader.readAsText(file);
+  fileInput.value = "";
+});
+
+// ── Init ──
+drawScale({});
+pingHealth();
+loadManifest();
