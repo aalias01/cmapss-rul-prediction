@@ -28,8 +28,7 @@ const deflRows = document.getElementById("deflRows");
 const statusLine = document.getElementById("statusLine");
 const nameplateWarmupEl = document.getElementById("nameplateWarmup");
 const readoutWarmupEl = document.getElementById("readoutWarmup");
-const shopToggle = document.getElementById("shopToggle");
-const shopLabel = document.getElementById("shopLabel");
+const modeToggle = document.getElementById("modeToggle");
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -47,29 +46,29 @@ const WARMUP_COPY = {
   overrun: "> past the usual window · still waiting, counting up honestly",
 };
 
-// ── Shop toggle (cookie shop across .alvinalias.com, localStorage fallback) ──
-function currentShop() {
+// ── Mode toggle (shared mode cookie, localStorage fallback) ──
+function currentTheme() {
   return document.documentElement.getAttribute("data-theme") === "night" ? "night" : "day";
 }
-function applyShop(shop) {
-  const night = shop === "night";
-  document.documentElement.setAttribute("data-theme", shop);
+function applyTheme(theme) {
+  const night = theme === "night";
+  document.documentElement.setAttribute("data-theme", theme);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", night ? "#201f1c" : "#f5f4ef");
-  shopToggle.setAttribute("aria-checked", night ? "true" : "false");
-  shopToggle.setAttribute("aria-label", night ? "Switch to day shop" : "Switch to night shop");
-  shopLabel.textContent = night ? "day shop" : "night shop";
+  modeToggle.setAttribute("aria-checked", night ? "true" : "false");
+  modeToggle.setAttribute("aria-label", night ? "Switch to light mode" : "Switch to dark mode");
 }
-function persistShop(shop) {
-  try { document.cookie = `shop=${shop}; domain=.alvinalias.com; path=/; max-age=31536000; SameSite=Lax`; } catch (e) {}
-  try { localStorage.setItem("shop", shop); } catch (e) {}
+function persistMode(theme) {
+  const mode = theme === "night" ? "dark" : "light";
+  try { document.cookie = `mode=${mode}; domain=.alvinalias.com; path=/; max-age=31536000; SameSite=Lax`; } catch (e) {}
+  try { localStorage.setItem("mode", mode); } catch (e) {}
 }
-shopToggle.addEventListener("click", () => {
-  const next = currentShop() === "night" ? "day" : "night";
-  applyShop(next);
-  persistShop(next);
+modeToggle.addEventListener("click", () => {
+  const next = currentTheme() === "night" ? "day" : "night";
+  applyTheme(next);
+  persistMode(next);
 });
-applyShop(currentShop());
+applyTheme(currentTheme());
 
 // ── Wake-on-load: ping /health, report state in plain words ──
 async function pingHealth() {
@@ -214,11 +213,13 @@ function buildWarmupView(slot, compact) {
   const svg = document.createElementNS(SVGNS, "svg");
   const W = 600, H = compact ? 42 : 56, baseY = compact ? 20 : 28;
   const padL = 8, padR = 8;
+  const labels = [];
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.setAttribute("preserveAspectRatio", "none");
   svg.setAttribute("aria-hidden", "true");
 
   const x = (seconds) => padL + (seconds / WARMUP_SECONDS) * (W - padL - padR);
+  const labelLeft = (seconds) => `${(x(seconds) / W) * 100}%`;
   const mk = (tag, attrs, cls) => {
     const el = document.createElementNS(SVGNS, tag);
     if (cls) el.setAttribute("class", cls);
@@ -238,9 +239,7 @@ function buildWarmupView(slot, compact) {
       }, major ? "wm-tick-major" : "wm-tick-minor"),
     );
     if (major) {
-      const t = mk("text", { x: x(s), y: baseY + 24, "text-anchor": "middle" }, "wm-num");
-      t.textContent = s;
-      svg.appendChild(t);
+      labels.push({ text: String(s), left: labelLeft(s) });
     }
   }
 
@@ -251,6 +250,17 @@ function buildWarmupView(slot, compact) {
   );
   svg.appendChild(marker);
   scale.appendChild(svg);
+  const labelLayer = document.createElement("div");
+  labelLayer.className = "warmup-scale-labels";
+  labelLayer.setAttribute("aria-hidden", "true");
+  labels.forEach((item) => {
+    const span = document.createElement("span");
+    span.className = "wm-num-label";
+    span.style.left = item.left;
+    span.textContent = item.text;
+    labelLayer.appendChild(span);
+  });
+  scale.appendChild(labelLayer);
 
   const log = document.createElement("div");
   log.className = "warmup-log mono";
@@ -501,6 +511,8 @@ function drawScale(opts) {
   const W = 500, H = 64, padL = 8, padR = 8;
   const baseY = 42;
   const x = (v) => padL + (v / 125) * (W - padL - padR);
+  const labels = [];
+  const labelLeft = (v) => `${(x(v) / W) * 100}%`;
 
   const svg = document.createElementNS(SVGNS, "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -522,9 +534,7 @@ function drawScale(opts) {
       x1: x(v), y1: baseY, x2: x(v), y2: baseY + (major ? 8 : 4),
     }, major ? "sc-tick-major" : "sc-tick-minor"));
     if (major) {
-      const t = mk("text", { x: x(v), y: baseY + 20, "text-anchor": "middle" }, "sc-num");
-      t.textContent = v;
-      svg.appendChild(t);
+      labels.push({ text: String(v), left: labelLeft(v), cls: "sc-num-label" });
     }
   }
 
@@ -539,9 +549,7 @@ function drawScale(opts) {
     // truth: dashed line + label
     if (typeof o.truth === "number") {
       svg.appendChild(mk("line", { x1: x(o.truth), y1: 16, x2: x(o.truth), y2: baseY + 8 }, "sc-truth"));
-      const lab = mk("text", { x: x(o.truth), y: 12, "text-anchor": "middle" }, "sc-truth-lab");
-      lab.textContent = `official ${o.truth}`;
-      svg.appendChild(lab);
+      labels.push({ text: `official ${o.truth}`, left: labelLeft(o.truth), cls: "sc-truth-label" });
     }
     // marker: filled triangle pointing down onto the baseline
     const mx = x(o.rul);
@@ -551,6 +559,17 @@ function drawScale(opts) {
 
   scaleEl.innerHTML = "";
   scaleEl.appendChild(svg);
+  const labelLayer = document.createElement("div");
+  labelLayer.className = "scale-labels";
+  labelLayer.setAttribute("aria-hidden", "true");
+  labels.forEach((item) => {
+    const span = document.createElement("span");
+    span.className = item.cls;
+    span.style.left = item.left;
+    span.textContent = item.text;
+    labelLayer.appendChild(span);
+  });
+  scaleEl.appendChild(labelLayer);
 
   let aria = "Scale from 0 to 125 cycles.";
   if (typeof o.rul === "number") {
