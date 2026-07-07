@@ -2,7 +2,7 @@
 // API wiring (endpoint, payload, response parsing) is unchanged from the
 // prior issue: the hardcoded production constant below is the contract.
 
-const API_BASE = "https://cmapss-rul-api.onrender.com";
+const API_BASE = "https://alvinalias-cmapss-rul.hf.space";
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -35,7 +35,7 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const WARMUP_SECONDS = 60;
 const WARMUP_GRACE_MS = 2500;
 const FREE_TIER_TEXT =
-  "This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.";
+  "This ML demo sleeps after extended inactivity. First wake can take a moment; runs after that are quick.";
 const WARMUP_COPY = {
   sent: "> server was asleep · sent the wake call",
   counting: "> warm-up estimate counting · this is an estimate, not progress",
@@ -43,7 +43,7 @@ const WARMUP_COPY = {
   readyLabel: "ready",
   awake: (seconds) => `> awake · measured wake time ${seconds} s`,
   overrunLabel: "seconds elapsed · still starting",
-  overrun: "> past the usual window · still waiting, counting up honestly",
+  overrun: "> still waiting · the Space is waking from extended inactivity",
 };
 
 // ── Mode toggle (shared mode cookie, localStorage fallback) ──
@@ -700,7 +700,7 @@ async function predict(readings, meta) {
     statusLine.textContent = "model awake";
   } catch (e) {
     dismissRunWarmup();
-    showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
+    showError("Could not reach the model. The Space may still be waking from extended inactivity. Try again in a moment.");
   } finally {
     setBusy(false);
   }
@@ -739,7 +739,7 @@ runKnownBtn.addEventListener("click", async () => {
   const eng = nextEngine();
   if (!eng) {
     clearLog();
-    showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
+    showError("Could not reach the model. The Space may still be waking from extended inactivity. Try again in a moment.");
     return;
   }
   clearLog();
@@ -750,7 +750,7 @@ runKnownBtn.addEventListener("click", async () => {
     rows = parseCSV(await res.text());
   } catch (e) {
     setBusy(false);
-    showError("Could not reach the model. If this is the first run in a while, the server is still waking; that takes 30 to 60 seconds. Try again in a moment.");
+    showError("Could not reach the model. The Space may still be waking from extended inactivity. Try again in a moment.");
     return;
   }
   if (!rows || rows.length === 0) {

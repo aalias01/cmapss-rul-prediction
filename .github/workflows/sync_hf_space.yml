@@ -1,0 +1,65 @@
+name: Sync CMAPSS HF Space
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "api/**"
+      - "models/**"
+      - "requirements.txt"
+      - "deploy/hf_space/**"
+      - ".github/workflows/sync_hf_space.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-cmapss-hf-space
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub repo
+        uses: actions/checkout@v4
+
+      - name: Stage serving subset
+        run: bash deploy/hf_space/sync_to_space.sh
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${HF_TOKEN}" ]; then
+            echo "HF_TOKEN secret is not set. Add a write token at:"
+            echo "https://github.com/${GITHUB_REPOSITORY}/settings/secrets/actions"
+            exit 1
+          fi
+
+          HF_TOKEN_ENCODED="$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['HF_TOKEN'], safe=''))")"
+
+          git lfs install
+          git config --global credential.helper store
+          printf 'https://alvinalias:%s@huggingface.co\n' "${HF_TOKEN_ENCODED}" > ~/.git-credentials
+
+          GIT_LFS_SKIP_SMUDGE=1 git clone "https://alvinalias:${HF_TOKEN_ENCODED}@huggingface.co/spaces/alvinalias/cmapss-rul" /tmp/hf-space
+
+          rsync -av deploy/hf_space/ /tmp/hf-space/ \
+            --exclude sync_to_space.sh \
+            --exclude PUSH_TO_HF.md \
+            --exclude OPTIONAL_WAKE_STRATEGIES.md
+
+          cd /tmp/hf-space
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          git add README.md Dockerfile requirements.txt .gitignore api models
+          if git diff --staged --quiet; then
+            echo "No HF Space changes to push."
+            exit 0
+          fi
+
+          git commit -m "Sync from GitHub ${GITHUB_SHA::7}"
+          git push
