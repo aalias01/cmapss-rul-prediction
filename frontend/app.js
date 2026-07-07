@@ -2,7 +2,7 @@
 // API wiring (endpoint, payload, response parsing) is unchanged from the
 // prior issue: the hardcoded production constant below is the contract.
 
-const API_BASE = "https://alvinalias-cmapss-rul.hf.space";
+const API_BASE = "https://alvinalias-portfolio-ml-api.hf.space/cmapss";
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
