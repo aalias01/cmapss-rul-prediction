@@ -79,9 +79,15 @@
       <input type="file" id="fileInput" accept=".csv" hidden />
     </div>
 
-    <div class="fp-log mono" id="log" aria-live="polite" aria-label="Run log"></div>
+    <details class="fp-log mobile-disclosure" data-mobile-disclosure open>
+      <summary>Run log</summary>
+      <div class="mobile-disclosure__body mono" id="log" aria-live="polite" aria-label="Run log"></div>
+    </details>
 
-    <div class="fp-traces" id="traces" aria-label="Sensor traces of the loaded engine" role="img"></div>
+    <details class="fp-traces mobile-disclosure" data-mobile-disclosure open>
+      <summary>Sensor traces</summary>
+      <div class="mobile-disclosure__body" id="traces" aria-label="Sensor traces of the loaded engine" role="img"></div>
+    </details>
 
     <div class="fp-readout">
       <div class="warmup-slot warmup-slot-full hidden" id="readoutWarmup"></div>
@@ -104,10 +110,13 @@
         <p id="warnText"></p>
       </div>
 
-      <div class="deflection hidden" id="deflection">
-        <h2 class="deflection-title">What moved this estimate</h2>
-        <div class="deflection-rows" id="deflRows"></div>
-      </div>
+      <details class="deflection mobile-disclosure hidden" id="deflection" data-mobile-disclosure open>
+        <summary>What moved this estimate</summary>
+        <div class="mobile-disclosure__body">
+          <h2 class="deflection-title">What moved this estimate</h2>
+          <div class="deflection-rows" id="deflRows"></div>
+        </div>
+      </details>
     </div>
   </main>
 
@@ -160,6 +169,7 @@
     </p>
   </footer>
 
+  <script src="mobile-disclosures.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
