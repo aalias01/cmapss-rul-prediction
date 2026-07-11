@@ -9,7 +9,7 @@ Predicts how many cycles a turbofan engine has left before failure from raw sens
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
-**[Live demo](https://turbofan.alvinalias.com)** | **[API docs](https://cmapss-rul-api.onrender.com/docs)**
+**[Live demo](https://turbofan.alvinalias.com)** | **[API docs](https://alvinalias-portfolio-ml-api.hf.space/cmapss/docs)**
 
 ## Results
 
@@ -65,11 +65,11 @@ frontend/app.js  ->  POST /predict  ->  api/predictor.py
                                     JSON response rendered in browser
 ```
 
-The API validates inputs with Pydantic before any inference runs and returns a confidence band with each point estimate. SHAP uses XGBoost's native `pred_contribs` (exact TreeSHAP), which also sidesteps the shap package's XGBoost 3.x loader incompatibility. Frontend is static HTML/CSS/JS on Vercel; backend is FastAPI on Render with a `render.yaml` Blueprint.
+The API validates inputs with Pydantic before any inference runs and returns a confidence band with each point estimate. SHAP uses XGBoost's native `pred_contribs` (exact TreeSHAP), which also sidesteps the shap package's XGBoost 3.x loader incompatibility. Frontend is static HTML/CSS/JS on Vercel; the FastAPI backend is mounted at `/cmapss` in the shared Hugging Face Docker Space.
 
 ## Tech stack
 
-Python 3.11, Pandas, NumPy, scikit-learn (Ridge baseline, grouped splits), XGBoost 3.2 (pinned to the training version), exact TreeSHAP via `pred_contribs`, FastAPI + Pydantic on Render, vanilla HTML/CSS/JS on Vercel. Pins in `environment.yml` (conda, local) and `requirements.txt` (pip, Render).
+Python 3.11, Pandas, NumPy, scikit-learn (Ridge baseline, grouped splits), XGBoost 3.2 (pinned to the training version), exact TreeSHAP via `pred_contribs`, FastAPI + Pydantic on a shared Hugging Face Docker Space, vanilla HTML/CSS/JS on Vercel. Pins are in `environment.yml` for local conda work and `requirements.txt` for pip serving.
 
 ## Run it locally
 
@@ -114,11 +114,11 @@ Open `frontend/index.html` in a browser. `frontend/app.js` has a hardcoded `API_
 
 - FD001 only: single operating condition, single fault mode (HPC degradation). FD002 through FD004 add operating regimes and fault modes this model hasn't seen.
 - The RUL cap at 125 cycles means very healthy engines all read as "125+", by design.
-- The API runs on Render's free tier; the first request after idle can take around a minute to cold-start.
+- The shared Hugging Face CPU Space sleeps after extended inactivity; the first request to this route can take a moment while the service wakes and loads its model.
 
 ## Deployment
 
-Render: **New + > Blueprint**, connect the repo; `render.yaml` provisions build, start, health check, and the Python 3.11.9 pin. Manual fallback: build `pip install -r requirements.txt`, start `uvicorn api.main:app --host 0.0.0.0 --port $PORT`, health check `/health`. Vercel: import the repo, root directory `frontend/`, no build step, then set `API_BASE` in `app.js` and add the Vercel URL to `allow_origins` in `api/main.py`.
+From the portfolio workspace, run `bash portfolio_ml_api/scripts/sync_from_portfolio.sh`, commit the changes in `portfolio_ml_api`, and push its `main` branch. GitHub Actions deploys the shared Hugging Face Docker Space. This service is mounted at `/cmapss`. Vercel serves `frontend/` at the live demo URL.
 
 ## Project structure
 
