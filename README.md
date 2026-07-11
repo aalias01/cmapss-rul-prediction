@@ -1,6 +1,6 @@
 # Turbofan Engine RUL Prediction (NASA CMAPSS)
 
-Predicts how many cycles a turbofan engine has left before failure, from raw sensor readings. XGBoost with rolling-window features reaches 15.85 RMSE on the official FD001 test set, ahead of the widely cited Zheng et al. 2017 deep LSTM (16.14), using tabular features only. Per-prediction SHAP output maps to known HPC degradation physics.
+Predicts how many cycles a turbofan engine has left before failure from raw sensor readings. XGBoost with rolling-window features reaches 15.85 RMSE on the official FD001 test set, competitive with the widely cited Zheng et al. 2017 deep LSTM result of 16.14, using tabular features only. Per-prediction SHAP output maps to known HPC degradation physics.
 
 [![CI](https://github.com/aalias01/cmapss-rul-prediction/actions/workflows/ci.yml/badge.svg)](https://github.com/aalias01/cmapss-rul-prediction/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
