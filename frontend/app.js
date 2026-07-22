@@ -132,9 +132,9 @@ function nextEngine() {
 const FEATURE_BASE = {
   sensor_3: "HPC outlet temperature",
   sensor_2: "LPC outlet temperature",
-  sensor_11: "static pressure ratio",
+  sensor_11: "HPC outlet static pressure",
   sensor_9: "core speed",
-  sensor_14: "core speed",
+  sensor_14: "corrected core speed",
 };
 function gloss(feature) {
   const m = String(feature).match(/^(sensor_\d+)(_mean30|_std30)?$/);
@@ -460,7 +460,7 @@ function createWarmupController(opts) {
 const TRACE_SENSORS = [
   { key: "sensor_3", n: 3, gloss: "HPC outlet temperature" },
   { key: "sensor_2", n: 2, gloss: "LPC outlet temperature" },
-  { key: "sensor_11", n: 11, gloss: "static pressure ratio" },
+  { key: "sensor_11", n: 11, gloss: "HPC outlet static pressure" },
 ];
 function drawTraces(rows) {
   tracesEl.innerHTML = "";
@@ -605,7 +605,7 @@ function renderDeflection(factors) {
     const name = document.createElement("span");
     name.className = "defl-name";
     name.textContent = gloss(f.feature);
-    name.title = `${f.feature} · SHAP value from the API response`;
+    name.title = `${f.feature} · SHAP association from the API response, not a causal claim`;
 
     const track = document.createElement("div");
     track.className = "defl-track";

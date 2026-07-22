@@ -1,10 +1,10 @@
 """
 Plotting utilities for CMAPSS turbofan RUL prediction.
 
-These helpers are used in the EDA and feature-engineering notebooks to produce
-the visualisations that drive modelling decisions: degradation trajectories
-(justify the rolling window), the RUL distribution (justify the 125-cycle cap),
-and sensor-level variance or correlation plots.
+These helpers are used in the EDA and feature-engineering notebooks to inspect
+degradation trajectories, the RUL distribution, and sensor-level variance or
+correlation. The plots provide context for modeling choices; they do not by
+themselves validate the 30-cycle smoothing horizon or establish causality.
 
 All functions accept an optional `ax` argument so they can be embedded in
 multi-panel figures alongside other plots.

@@ -29,27 +29,42 @@ The model uses the 14 informative sensor channels. Seven near-constant channels
 showed they carry no signal in FD001, and keeping them would add dimensionality
 without information. Each remaining sensor contributes three columns: its raw
 value, its 30-cycle rolling mean, and its 30-cycle rolling standard deviation,
-for 42 features total. The 30-cycle window was chosen to span roughly one HPC
-fouling cycle. The prediction is made from the most recent cycle, the row with
-the richest rolling-window context. Operating settings are carried in the payload
-but are not model features.
+for 42 features total. The 30-cycle window is a chosen smoothing horizon that
+balances recent history against short-term noise. It is not a measured fouling
+period or a validated optimum. The prediction is made from the most recent
+cycle, the row with the richest rolling-window context. Operating settings are
+carried in the payload but are not model features.
 
 ## Evaluation
 
 RMSE on the official FD001 test set, with all splits grouped by engine unit so no
-engine appears in both train and test:
+engine appears in both train and test.
+
+### Direct local comparison
 
 | Model | RMSE (FD001 test set) |
 |---|---|
 | XGBoost + rolling features (this model) | 15.85 |
-| Zheng et al. 2017, deep LSTM | 16.14 |
 | Ridge regression (this project's baseline) | 17.47 |
+
+The Ridge result was produced in this repository under the same local data and
+evaluation path, so it is the valid direct comparison.
+
+### Literature context only
+
+| Published model | Reported RMSE |
+|---|---|
+| Zheng et al. 2017, deep LSTM | 16.14 |
 | Babu et al. 2016, CNN | 18.45 |
 
-SHAP attributions were checked against the failure physics. The top feature,
-`sensor_3_mean30` (30-cycle rolling mean of HPC outlet temperature), is the
-expected thermodynamic signature of compressor fouling: as the compressor fouls,
-efficiency drops, outlet temperature rises, and remaining life shortens.
+These published values provide historical context. This repository has not
+audited protocol parity for preprocessing, RUL labeling, test aggregation, or
+scoring, so neither literature value is a valid direct benchmark for 15.85.
+
+The largest SHAP attribution is `sensor_3_mean30`, the 30-cycle rolling mean of
+HPC outlet temperature. That association is consistent with a compressor
+degradation interpretation, but SHAP explains this model's prediction. It does
+not establish physical causality or independently confirm a fouling mechanism.
 
 ## Limitations
 
@@ -57,6 +72,11 @@ efficiency drops, outlet temperature rises, and remaining life shortens.
 - The 125-cycle cap means very healthy engines all read near "125", by design.
 - The range shipped with each prediction is a fixed plus or minus 15 cycle
   heuristic. It is not a calibrated prediction interval.
+- The 30-cycle rolling window is a chosen smoothing horizon, not a validated
+  physical fouling period.
+- Literature RMSE values are unaudited context. Only the local Ridge RMSE of
+  17.47 is a direct comparison under this repository's evaluation path.
+- SHAP values are model attributions and associations, not causal evidence.
 - Single operating condition and single fault mode. FD002 through FD004 add
   operating regimes and fault modes this model has not seen, so its numbers do
   not transfer to them.

@@ -1,6 +1,6 @@
 # Turbofan Engine RUL Prediction (NASA CMAPSS)
 
-Predicts how many cycles a turbofan engine has left before failure from raw sensor readings. XGBoost with rolling-window features reaches 15.85 RMSE on the official FD001 test set, competitive with the widely cited Zheng et al. 2017 deep LSTM result of 16.14, using tabular features only. Per-prediction SHAP output maps to known HPC degradation physics.
+Predicts how many cycles a turbofan engine has left before failure from raw sensor readings. XGBoost with rolling-window features reaches 15.85 RMSE on this repo's FD001 protocol versus a 17.47 Ridge baseline. Per-prediction SHAP exposes which documented sensor channels drive each estimate.
 
 [![CI](https://github.com/aalias01/cmapss-rul-prediction/actions/workflows/ci.yml/badge.svg)](https://github.com/aalias01/cmapss-rul-prediction/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -20,7 +20,7 @@ Predicts how many cycles a turbofan engine has left before failure from raw sens
 | Zheng et al. 2017, deep LSTM | 16.14 | Widely cited sequence-model benchmark |
 | XGBoost + rolling features | **15.85** | This project |
 
-Transformer and hybrid CNN-LSTM papers published since have pushed FD001 lower, so 15.85 is a strong classical-ML result, not current state of the art.
+The published rows provide numeric context only. Their preprocessing, RUL cap, normalization, aggregation, and scoring protocol were not independently reproduced here, so this table does not establish that one method beat another.
 
 Dataset: 100 engines run to failure, 20,631 training cycles, 14 informative sensors after dropping 7 near-zero-variance channels, single operating condition (FD001), RUL capped at 125 cycles per the standard piecewise-linear convention.
 
@@ -36,9 +36,9 @@ Training data, features, evaluation, and limitations are documented in the [mode
 
 **Split by engine, never randomly.** A random 80/20 split puts cycles from the same engine in both train and test, so the model memorizes engine-level drift instead of learning degradation. All splits here are grouped by engine unit.
 
-**Features come from the physics, not grid search.** The 7 dropped sensors were identified by variance analysis and cross-checked against the CMAPSS dataset description (Saxena & Goebel 2008). The 30-cycle rolling window was chosen to span roughly one HPC fouling cycle.
+**Features expose trends.** The 7 dropped sensors were identified by variance analysis and cross-checked against the CMAPSS dataset description. The 30-cycle rolling window is a chosen smoothing horizon; a window-length sensitivity study is still needed.
 
-**SHAP output is checked against known failure physics.** The top feature, `sensor_3_mean30` (30-cycle rolling mean of HPC outlet temperature), is the primary thermodynamic signature of compressor fouling in FD001: as the compressor fouls, efficiency drops, outlet temperature rises, and remaining life shortens. The next features (`sensor_2_mean30`, `sensor_11`, `sensor_9_mean30`, `sensor_14_mean30`) are the correlated upstream and downstream sensors responding to the same fault. The model learned that chain from data; SHAP makes it legible.
+**SHAP output is interpreted against the documented channels.** The top feature is `sensor_3_mean30`, the 30-cycle rolling mean of HPC outlet temperature. Other leading channels include LPC outlet temperature, physical core speed, HPC-outlet static pressure, and corrected core speed. SHAP shows association with the prediction; it does not by itself prove a causal degradation chain.
 
 <p align="center">
   <img src="figures/01_degradation_trajectories.png" width="820" alt="Sensor degradation trajectories for 20 FD001 engines">
@@ -50,7 +50,7 @@ Training data, features, evaluation, and limitations are documented in the [mode
   <img src="figures/03_shap_summary.png" width="700" alt="SHAP beeswarm summary, top 15 features">
 </p>
 
-*SHAP beeswarm for the top 15 features across 300 training samples. For `sensor_3_mean30`, high temperature (red) pushes predictions toward shorter RUL, the expected fouling signature.*
+*SHAP beeswarm for the top 15 features across 300 training samples. For `sensor_3_mean30`, high temperature (red) is associated with predictions of shorter RUL. This attribution does not confirm a physical fouling mechanism.*
 
 ## How it works
 
@@ -108,12 +108,13 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-Open `frontend/index.html` in a browser. `frontend/app.js` has a hardcoded `API_BASE`; for local development, point a temporary copy of it at `http://localhost:8000`. The known-answer run picks one of the ten real NASA test engines in `frontend/samples/`, calls the model, and prints the model's error against that engine's official answer. The upload path takes your own CSV in the same columns as `frontend/sample_engine.csv`.
+Open `frontend/index.html` in a browser. `frontend/app.js` has a hardcoded `API_BASE`; for local development, point a temporary copy of it at `http://localhost:8000`. The known-answer run picks one of ten held-out simulated FD001 engine sequences in `frontend/samples/`, calls the model, and prints the model's error against the supplied answer. The upload path takes your own CSV in the same columns as `frontend/sample_engine.csv`.
 
 ## Limitations
 
 - FD001 only: single operating condition, single fault mode (HPC degradation). FD002 through FD004 add operating regimes and fault modes this model hasn't seen.
 - The RUL cap at 125 cycles means very healthy engines all read as "125+", by design.
+- Published benchmark values are not claimed as protocol-equivalent comparisons until their preprocessing and scoring choices are reproduced.
 - The shared Hugging Face CPU Space sleeps after extended inactivity; the first request to this route can take a moment while the service wakes and loads its model.
 
 ## Deployment

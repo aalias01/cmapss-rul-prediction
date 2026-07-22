@@ -23,8 +23,8 @@ RUL_CLIP : int
     Piecewise-linear cap (125 cycles). Standard CMAPSS convention — see README
     for the physical and statistical justification.
 ROLLING_WINDOW : int
-    Window size (30 cycles) for rolling statistics. Chosen to span roughly one
-    HPC fouling cycle while remaining robust to short engine runs.
+    Window size (30 cycles) for rolling statistics. This is a chosen smoothing
+    horizon, not a measured fouling period or a validated optimum.
 """
 
 import pandas as pd
@@ -45,7 +45,7 @@ CONSTANT_SENSORS = ["sensor_1", "sensor_5", "sensor_6", "sensor_10",
                     "sensor_16", "sensor_18", "sensor_19"]
 
 RUL_CLIP = 125       # Piecewise-linear RUL cap (standard CMAPSS convention)
-ROLLING_WINDOW = 30  # Rolling window size in cycles
+ROLLING_WINDOW = 30  # Chosen smoothing horizon, not a measured fouling period
 
 
 def load_raw(filepath: str) -> pd.DataFrame:
@@ -140,7 +140,8 @@ def add_rolling_features(df: pd.DataFrame, window: int = ROLLING_WINDOW) -> pd.D
         DataFrame with 'unit' column and one or more 'sensor_*' columns.
         Constant sensors should be dropped before calling this function.
     window : int, optional
-        Rolling window size in cycles. Default is ROLLING_WINDOW (30).
+        Rolling window size in cycles. Default is ROLLING_WINDOW (30), a chosen
+        smoothing horizon rather than a validated physical period.
 
     Returns
     -------

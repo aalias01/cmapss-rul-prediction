@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Remaining useful life · turbofan engines</title>
-  <meta name="description" content="Estimates how many cycles a turbofan engine has left, from its sensor history. Runs a real NASA test engine against the model and prints the model's own error." />
+  <meta name="description" content="Estimates how many cycles a turbofan engine has left from its sensor history. Runs a held-out sequence from NASA's simulated FD001 dataset and prints the model's own error." />
   <meta name="theme-color" content="#f5f4ef" />
 
   <!-- No-flash mode script: shared mode cookie, localStorage fallback for localhost. -->
@@ -43,8 +43,8 @@
     </div>
 
     <div class="np-gov" title="Source: README results table, FD001 official test set">
-      <span class="np-gov-val mono">RMSE 15.85 / limit 16.14</span>
-      <span class="np-gov-sub">published LSTM benchmark, Zheng 2017</span>
+      <span class="np-gov-val mono">RMSE 15.85 / Ridge 17.47</span>
+      <span class="np-gov-sub">direct local comparison on the FD001 test set</span>
     </div>
 
     <div class="np-meta">
@@ -71,8 +71,8 @@
   <main class="faceplate">
 
     <div class="fp-actions">
-      <button class="btn btn-primary" id="runKnown" type="button">Run a known engine</button>
-      <p class="helper">Picks one of 10 real engines from the NASA test set. The official answer appears only after the model commits.</p>
+      <button class="btn btn-primary" id="runKnown" type="button">Run a held-out engine</button>
+      <p class="helper">Picks one of 10 held-out engine sequences from NASA's simulated FD001 test set. The official answer appears only after the model commits.</p>
 
       <button class="btn btn-secondary" id="uploadBtn" type="button">Upload your own CSV</button>
       <p class="helper">Same columns as the sample file. <a href="sample_engine.csv" download>download the sample CSV</a></p>
@@ -123,19 +123,19 @@
   <!-- Fold rows -->
   <section class="folds">
     <details class="fold">
-      <summary>Calibration record <span class="fold-sub">· every claim next to its benchmark</span></summary>
+      <summary>Calibration record <span class="fold-sub">· direct comparison separated from literature context</span></summary>
       <div class="fold-body">
         <table class="cal-table">
           <caption>RMSE on the FD001 official test set</caption>
           <tbody>
-            <tr><td class="mono">15.85</td><td>this model</td></tr>
-            <tr><td class="mono">16.14</td><td>deep LSTM, Zheng 2017</td></tr>
-            <tr><td class="mono">17.47</td><td>ridge regression baseline</td></tr>
-            <tr><td class="mono">18.45</td><td>CNN, Babu 2016</td></tr>
+            <tr><td class="mono">15.85</td><td>this model, local evaluation</td></tr>
+            <tr><td class="mono">17.47</td><td>Ridge baseline, valid direct local comparison</td></tr>
+            <tr><td class="mono">16.14</td><td>Zheng 2017 reported value, context only</td></tr>
+            <tr><td class="mono">18.45</td><td>Babu 2016 reported value, context only</td></tr>
           </tbody>
         </table>
         <p class="cal-line">100 engines run to failure · 20,631 training cycles · 14 informative sensors after dropping 7 flat channels</p>
-        <p class="cal-line cal-close">Transformer and hybrid models published since have gone lower; 15.85 is a strong classical result, not the state of the art.</p>
+        <p class="cal-line cal-close">The literature protocols have not been audited for parity with this repository. Only the local Ridge result is a direct comparison; the published values are context, not evidence that this model beat them.</p>
       </div>
     </details>
 
@@ -143,8 +143,8 @@
       <summary>How it works <span class="fold-sub">· features, split, model</span></summary>
       <div class="fold-body">
         <p>I split by engine, never at random. A random split drops cycles from the same engine into both train and test, so the model learns that engine's own drift instead of the shape of degradation.</p>
-        <p>The features are 30-cycle rolling means and spreads. The window is sized to roughly one HPC fouling cycle, taken from the physics rather than a grid search.</p>
-        <p>I checked SHAP against that physics. Rising HPC outlet temperature is the fouling signature the model should lean on, and it does.</p>
+        <p>The features are 30-cycle rolling means and spreads. Thirty cycles is a chosen smoothing horizon, not a measured fouling period or a validated optimum.</p>
+        <p>The largest SHAP attribution is associated with the rolling mean of HPC outlet temperature. That is consistent with a degradation interpretation, but SHAP describes this model's associations and does not establish physical cause.</p>
       </div>
     </details>
 
@@ -155,7 +155,7 @@
           <li>This ML demo sleeps after extended inactivity. First wake can take a moment; runs after that are quick.</li>
           <li>The model was trained with remaining life capped at 125 cycles, the standard convention for this dataset, so no estimate can exceed 125.</li>
           <li>The range shown is a &plusmn;15 cycle heuristic, not a formal prediction interval.</li>
-          <li>The known engines are real NASA test engines. Their official answers ship with this page and stay hidden until after each run.</li>
+          <li>The known records are held-out engine sequences from NASA's simulated FD001 dataset. Their official answers ship with this page and stay hidden until after each run.</li>
           <li>One engine's estimate says nothing about a different engine type or operating condition; FD001 is a single operating condition.</li>
         </ol>
       </div>
